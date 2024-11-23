@@ -1,7 +1,7 @@
-#  360° Peer Feedback
+#  PlanAsYouGo: Real-Time Itinerary Building
 PlanAsYouGo: Real-Time Itinerary Building<br>
 
-<img src="assets/images/event_planner.png" height="200">
+<img src="https://github.com/bargav25/bargav25.github.io/blob/main/assets/images/event_planner.png" height="200">
 <br>
 
 ## Top 3 Features
