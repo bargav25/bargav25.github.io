@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bargav Jagatha | ML Research</title>
+    <link rel="stylesheet" href="./style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <div class="logo">BJ</div>
+            <div class="nav-links">
+                <a href="#experience">Experience</a>
+                <a href="#projects">Projects</a>
+                <a href="#articles">Articles</a>
+                <a href="#contact">Contact</a>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <section id="hero">
+            <div class="container">
+                <h1>Hello, I'm Bargav Jagatha</h1>
+                <p class="subtitle">Machine Learning Engineer</p>
+                <div class="profile-info">
+                    <div class="profile-text">
+                        <p>Specialized in Time Series, LLMs and 3D Computer Vision</p>
+                        <br>
+                        <div class="cta-buttons">
+                            <a href="#experience" class="primary-button">View Experience</a>
+                            <a href="#contact" class="secondary-button">Get in Touch</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-background">
+                <div class="gradient-circle"></div>
+                <div class="gradient-circle"></div>
+            </div>
+        </section>
+
+        <section id="experience">
+            <div class="container">
+                <h2>Experience</h2>
+                <div class="experience-container">
+                    <div class="experience-tabs">
+                        <button class="tab-btn active" data-company="bu">Boston University</button>
+                        <button class="tab-btn" data-company="ola">OLA</button>
+                        <button class="tab-btn" data-company="samsung">SAMSUNG</button>
+                        <!-- Add more companies as needed -->
+                    </div>
+                    
+                    <div class="experience-content">
+                        <div class="experience-panel active" data-company="bu">
+                            <div class="experience-header">
+                                <div class="company-info">
+                                    <img src="./logos/bumed_logo.jpg" alt="Boston University" class="company-logo">
+                                    <div>
+                                        <h3>Research Data Scientist</h3>
+                                        <p class="company-name">Boston University Chobanian & Avedisian School of Medicine</p>
+                                        <p class="duration">May 2024 - Present · ~ 1 yr</p>
+                                        <p class="location">Boston, Massachusetts</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="skills-container">
+                                <div class="skill-tag">PyTorch</div>
+                                <div class="skill-tag">Time Series</div>
+                                <div class="skill-tag">LLMs</div>
+                                <div class="skill-tag">RAG</div>
+                                <div class="skill-tag">Healthcare AI</div>
+                            </div>
+
+                            <div class="experience-details">
+                                <ul class="achievement-list">
+                                    <li>
+                                        <span class="achievement-bullet">▹</span>
+                                        Applied Self-Attention based Imputation methods to impute missing longitudinal cognition data for Alzheimer's patients in US and EU cohorts, achieving 0.43 MAE (US) and 0.44 MAE (EU).
+                                    </li>
+                                    <li>
+                                        <span class="achievement-bullet">▹</span>
+                                        Evaluated imputation methods using downstream tasks such as forecasting and statistical analyses like Paired T-Tests.
+                                    </li>
+                                    <li>
+                                        <span class="achievement-bullet">▹</span>
+                                        Developed a clinical chatbot using LLama3 and Retrieval-Augmented Generation (RAG) with clinical.gov data.
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Template for other experiences -->
+                        <div class="experience-panel" data-company="ola">
+                            <div class="experience-header">
+                                <div class="company-info">
+                                    <img src="logos/ola_logo.png" alt="OLA" class="company-logo">
+                                    <div>
+                                        <h3>Data Scientist (Machine Learning Engineer)</h3>
+                                        <p class="company-name">OLA, ANI Technologies</p>
+                                        <p class="duration">Feb 2022 - July 2023 · 1 yr 5 months</p>
+                                        <p class="location">Bangalore, India</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="skills-container">
+                                <div class="skill-tag">PyTorch</div>
+                                <div class="skill-tag">MLOps</div>
+                                <div class="skill-tag">LLMs</div>
+                                <div class="skill-tag">Time Series</div>
+                                <div class="skill-tag">Big Data</div>
+                            </div>
+
+                            <div class="experience-details">
+                                <ul class="achievement-list">
+                                    <li>
+                                        <span class="achievement-bullet">▹</span>
+                                        Optimized dynamic pricing and rider-driver matching ML systems driving 6% GMV increase ($1M+ revenue)
+                                            <ul> Designed reinforcement learning models for real-time customer driver matching to reduce the number of trip cancellations. </ul>
+                                            <ul>Built scalable data pipelines using PySpark and SQL for feature engineering on terabytes of historical cab trip data. </ul>
+                                            <ul>Implemented Shadow Analysis, A/B testing, Canary Deployments, and automated retraining triggered. </ul>
+                                    </li>
+                                    <li>
+                                        <span class="achievement-bullet">▹</span>
+                                        Architected LSTM-based proximity unlock system for electric scooters achieving 97% accuracy. Optimized for TensorFlow Lite, handled Bluetooth signal noise, and deployed to Android HMI for major OS release.
+                                    </li>
+                                    <li>
+                                        <span class="achievement-bullet">▹</span>
+                                        Developed ETA prediction model using XGBoost and Graph Neural Networks with GeoSpatial features and H3 indices, achieving 1.3-minute MAE for driver arrivals.
+                                    </li>
+                                    <li>
+                                        <span class="achievement-bullet">▹</span>
+                                        Built and deployed customer support chatbot (96% intent accuracy) using GitLab, Jenkins, Kubernetes, Docker, and
+                                        Vue.js. Led integration with product and frontend teams, conducting A/B testing for performance optimization.                                    
+                                    </li>
+                                </ul>
+                            </div>                        
+                        </div>
+
+                        <div class="experience-panel" data-company="samsung">
+                            <div class="experience-header">
+                                <div class="company-info">
+                                    <img src="logos/samsung_logo.png" alt="samsung" class="company-logo">
+                                    <div>
+                                        <h3>Software Engineering Intern, Edge AI</h3>
+                                        <p class="company-name">Samsung Research</p>
+                                        <p class="duration">May 2021 - July 2021 · ~ 3 months</p>
+                                        <p class="location">Bangalore, India</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="skills-container">
+                                <div class="skill-tag">Java</div>
+                                <div class="skill-tag">SQLite</div>
+                                <div class="skill-tag">C</div>
+                                <div class="skill-tag">FFmpeg</div>
+                                <div class="skill-tag">Weka</div>
+                            </div>
+
+                            <div class="experience-details">
+                                <ul class="achievement-list">
+                                    <li>
+                                        <span class="achievement-bullet">▹</span>
+                                        Designed an Android Java/SQLite database in the Edge AI team to manage smart home security clip metadata. Created functions for tasks like deleting clips with no motion and built a simple app interface for easy management.
+                                    </li>
+                                    <li>
+                                        <span class="achievement-bullet">▹</span>
+                                        Crafted native C code with FFmpeg to convert H264 clips to JPEGs, processing input/output via buffers for thumbnail extraction.
+                                    </li>
+                                </ul>
+                            </div>                               <!-- Similar structure for NVIDIA experience -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="projects">
+            <div class="container">
+                <h2>Featured Projects</h2>
+                
+                <!-- Project category tabs -->
+                <div class="project-categories">
+                    <button class="category-btn active" data-category="all">All</button>
+                    <button class="category-btn" data-category="ml">Machine Learning</button>
+                    <button class="category-btn" data-category="cv">Computer Vision</button>
+                    <button class="category-btn" data-category="nlp">NLP</button>
+                </div>
+
+                <div class="projects-grid">
+                    <article class="project-card" data-category="cv">
+                        <div class="project-content">
+                            <div class="project-main">
+                                <div class="project-header">
+                                    <div class="project-title">
+                                        <h3>Dynamic NeRF for Real-Time 3D Scene Reconstruction</h3>
+                                        <div class="project-links">
+                                            <a href="https://github.com/bargav25/RatNeRF" class="link-item" target="_blank">
+                                                <i class="fab fa-github"></i>
+                                            </a>
+                                            <a href="https://medium.com/@bargav25/keypointnerf-..." class="link-item" target="_blank">
+                                                <i class="fab fa-medium"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <p class="project-description">
+                                        A Novel Approach to 3D Motion Capture Using Neural Radiance Fields
+                                    </p>
+                                </div>
+
+                                <div class="project-details">
+                                    <div class="key-features">
+                                        <h4>Key Features</h4>
+                                        <ul>
+                                            <li>Dynamic NeRF pipeline to reconstruct 3D shapes and motions from monocular videos using 3D keypoints.</li>
+                                            <li>Enabled generation of custom 3D animations for dynamic scenes using only keypoint data.</li>
+                                            <li>Improved rendering speed</li>
+                                        </ul>
+                                    </div>
+                                    
+                                    <div class="tech-stack">
+                                        <div class="tech-tag">PyTorch</div>
+                                        <div class="tech-tag">CUDA</div>
+                                        <div class="tech-tag">Computer Vision</div>
+                                        <div class="tech-tag">NeRF</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="project-image">
+                                <img src="./images/ratnerf.png" alt="Project Preview">
+                            </div>
+                        </div>
+                    </article>
+
+                    <!-- Add more project cards with the same structure -->
+                </div>
+            </div>
+        </section>
+
+        <!-- <section id="articles">
+            <div class="container">
+                <h2>Articles </h2>
+                <div class="articles-grid">
+                    <article class="article-card">
+                        <div class="article-content">
+                            <span class="article-date">Mar 2024</span>
+                            <h3>Article Title</h3>
+                            <p>Brief description of the article content...</p>
+                            <a href="#" class="read-more">Read Article →</a>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </section> -->
+
+        <section id="contact">
+            <div class="container">
+                <h2>Let's Connect</h2>
+                <div class="contact-content">
+                    <p>Interested in collaboration or have questions about my research?</p>
+                    <div class="contact-links">
+                        <a href="mailto:jbargav025@gmail.com" class="primary-button">
+                            <i class="fas fa-envelope"></i> Email
+                        </a>
+                        <div class="social-links">
+                            <a href="https://github.com/bargav25/" target="_blank">
+                                <i class="fab fa-github"></i>
+                            </a>
+                            <a href="https://www.linkedin.com/in/bargav" target="_blank">
+                                <i class="fab fa-linkedin"></i>
+                            </a>
+                            <a href="https://twitter.com/" target="_blank">
+                                <i class="fab fa-twitter"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>© 2025 Bargav Jagatha</p>
+        </div>
+    </footer>
+
+    <script src="./script.js"></script>
+</body>
+</html> 
