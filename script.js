@@ -113,29 +113,20 @@ hamburger?.addEventListener('click', () => {
     hamburger.classList.toggle('active');
 });
 
-// Experience tab switching
+// Experience tab functionality
 const tabButtons = document.querySelectorAll('.tab-btn');
 const experiencePanels = document.querySelectorAll('.experience-panel');
 
 function switchTab(company) {
-    console.log('Switching to:', company);
-    
-    // Update active tab button
+    // Update active states
     tabButtons.forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.company === company) {
-            btn.classList.add('active');
-        }
+        btn.classList.toggle('active', btn.dataset.company === company);
     });
 
-    // Update active panel with fade effect
     experiencePanels.forEach(panel => {
         if (panel.dataset.company === company) {
-            panel.style.opacity = '0';
             panel.classList.add('active');
-            setTimeout(() => {
-                panel.style.opacity = '1';
-            }, 50);
+            panel.style.opacity = '1';
         } else {
             panel.classList.remove('active');
             panel.style.opacity = '0';
@@ -143,24 +134,34 @@ function switchTab(company) {
     });
 }
 
-// Add click event listeners to tab buttons
+// Initialize first tab
+document.addEventListener('DOMContentLoaded', () => {
+    const firstTab = document.querySelector('.tab-btn');
+    if (firstTab) {
+        switchTab(firstTab.dataset.company);
+    }
+});
+
+// Handle click events
 tabButtons.forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        const company = btn.dataset.company;
-        console.log('Tab clicked:', company);
-        switchTab(company);
+    btn.addEventListener('click', () => {
+        switchTab(btn.dataset.company);
     });
 });
 
-// Initialize the first tab as active
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded');
-    const firstTab = document.querySelector('.tab-btn');
-    if (firstTab) {
-        const company = firstTab.dataset.company;
-        console.log('Initializing first tab:', company);
-        switchTab(company);
+// Handle hover events
+tabButtons.forEach(btn => {
+    btn.addEventListener('mouseenter', () => {
+        switchTab(btn.dataset.company);
+    });
+});
+
+// Return to active tab when not hovering
+const experienceContainer = document.querySelector('.experience-container');
+experienceContainer.addEventListener('mouseleave', () => {
+    const activeTab = document.querySelector('.tab-btn.active');
+    if (activeTab) {
+        switchTab(activeTab.dataset.company);
     }
 });
 
@@ -191,4 +192,16 @@ categoryButtons.forEach(btn => {
         btn.classList.add('active');
         filterProjects(btn.dataset.category);
     });
-}); 
+});
+
+// Remove or comment out the experience tab click handlers
+/*
+tabButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const company = btn.dataset.company;
+        console.log('Tab clicked:', company);
+        switchTab(company);
+    });
+});
+*/ 
