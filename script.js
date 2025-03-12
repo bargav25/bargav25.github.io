@@ -204,4 +204,35 @@ tabButtons.forEach(btn => {
         switchTab(company);
     });
 });
-*/ 
+*/
+
+// Resume Modal Functionality
+const modal = document.getElementById('resume-modal');
+const resumeBtn = document.getElementById('resume-btn');
+const closeBtn = document.querySelector('.close-modal');
+
+resumeBtn.onclick = function() {
+    modal.style.display = "block";
+    document.body.style.overflow = "hidden"; // Prevent scrolling when modal is open
+}
+
+closeBtn.onclick = function() {
+    modal.style.display = "none";
+    document.body.style.overflow = "auto"; // Re-enable scrolling
+}
+
+// Close modal when clicking outside of it
+window.onclick = function(event) {
+    if (event.target == modal) {
+        modal.style.display = "none";
+        document.body.style.overflow = "auto";
+    }
+}
+
+// Close modal on escape key
+document.addEventListener('keydown', function(event) {
+    if (event.key === "Escape" && modal.style.display === "block") {
+        modal.style.display = "none";
+        document.body.style.overflow = "auto";
+    }
+}); 

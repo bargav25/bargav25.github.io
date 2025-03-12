@@ -271,9 +271,49 @@ nav {
 
 /* Update buttons */
 .primary-button, .secondary-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.5rem;
+    border-radius: 30px;
     font-family: var(--font-heading);
+    font-size: 1rem;
     font-weight: 500;
-    letter-spacing: 0.5px;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: none;
+}
+
+.primary-button {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.secondary-button {
+    background-color: transparent;
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+
+.primary-button:hover, .secondary-button:hover {
+    transform: translateY(-2px);
+}
+
+.primary-button:hover {
+    background-color: var(--accent-color);
+    box-shadow: 0 4px 15px rgba(var(--accent-color-rgb), 0.3);
+}
+
+.secondary-button:hover {
+    background-color: var(--text-color);
+    color: var(--bg-color);
+}
+
+.cta-buttons {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
 }
 
 /* Contact Section */
@@ -783,5 +823,88 @@ footer {
 
     .project-content {
         padding: 1.5rem;
+    }
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1001;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+}
+
+.modal-content {
+    position: relative;
+    background-color: var(--bg-color);
+    margin: 2% auto;
+    padding: 20px;
+    width: 90%;
+    max-width: 1000px;
+    height: 90%;
+    border-radius: 12px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+}
+
+.close-modal {
+    position: absolute;
+    right: 25px;
+    top: 10px;
+    color: var(--text-color);
+    font-size: 35px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 1002;
+}
+
+.close-modal:hover {
+    color: var(--accent-color);
+}
+
+#resume-iframe {
+    border: none;
+    border-radius: 8px;
+    background-color: white;
+}
+
+.download-button {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    background-color: var(--accent-color);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 30px;
+    text-decoration: none;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.download-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+@media (max-width: 768px) {
+    .modal-content {
+        width: 95%;
+        height: 95%;
+        margin: 2.5% auto;
+    }
+    
+    .download-button {
+        bottom: 10px;
+        right: 10px;
+        padding: 8px 16px;
+        font-size: 0.9rem;
     }
 } 
