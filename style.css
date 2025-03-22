@@ -2,17 +2,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
 :root {
-    --primary-color: hsl(230, 60%, 20%);
-    --secondary-color: hsl(230, 60%, 25%);
-    --accent-color: hsl(280, 84%, 70%);
-    --text-color: hsl(230, 15%, 25%);
-    --bg-color: hsl(0, 0%, 100%);
-    --gray-light: hsl(230, 15%, 97%);
+    --primary-color: hsl(210, 100%, 40%); /* Darker blue */
+    --secondary-color: hsl(210, 100%, 60%); /* Lighter blue for hover effects */
+    --accent-color: hsl(40, 100%, 50%); /* Bright orange for accents */
+    --text-color: hsl(230, 15%, 25%); /* Dark text color */
+    --bg-color: hsl(0, 0%, 100%); /* White background */
+    --gray-light: hsl(230, 15%, 97%); /* Light gray for sections */
     --spacing: 8rem;
     
     /* Font families */
-    --font-heading: 'Space Grotesk', sans-serif;
-    --font-body: 'Manrope', sans-serif;
+    --font-heading: 'Courier New', monospace; /* Monospaced font for headings */
+    --font-body: 'Manrope', sans-serif; /* Main font */
 }
 
 * {
@@ -22,10 +22,10 @@
 }
 
 body {
-    font-family: var(--font-body);
+    background-color: var(--bg-color); /* Keep white background */
+    color: var(--text-color); /* Dark text color */
+    font-family: var(--font-body); /* Main font */
     line-height: 1.6;
-    color: var(--text-color);
-    background-color: var(--bg-color);
 }
 
 .container {
@@ -37,8 +37,8 @@ body {
 /* Typography updates */
 h1, h2, h3 {
     font-family: var(--font-heading);
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    font-weight: 700; /* Thicker font weight */
+    color: var(--primary-color); /* Darker blue for headings */
 }
 
 h1 {
@@ -50,11 +50,13 @@ h1 {
 h2 {
     font-size: 2.5rem;
     margin-bottom: 3rem;
+    color: var(--primary-color); /* Darker blue for h2 */
 }
 
 h3 {
     font-size: 1.5rem;
     margin-bottom: 1rem;
+    color: var(--primary-color); /* Darker blue for h3 */
 }
 
 .subtitle {
@@ -97,13 +99,13 @@ nav {
 
 .nav-links a {
     text-decoration: none;
-    color: var(--text-color);
+    color: var(--primary-color); /* Darker blue for nav links */
     font-weight: 500;
     transition: color 0.3s;
 }
 
 .nav-links a:hover {
-    color: var(--accent-color);
+    color: var(--secondary-color); /* Lighter blue on hover */
 }
 
 /* Hero Section */
@@ -213,15 +215,17 @@ nav {
 }
 
 .project-card {
-    background: white;
-    border-radius: 1rem;
+    border: 1px solid var(--accent-color); /* Bright orange border */
+    border-radius: 10px; /* Rounded corners */
+    background-color: #ffffff; /* White background */
     overflow: hidden;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-    transition: transform 0.3s ease;
+    transition: transform 0.3s;
 }
 
 .project-card:hover {
-    transform: translateY(-5px);
+    transform: scale(1.05); /* Slight zoom effect on hover */
+    box-shadow: 0 0 15px var(--accent-color); /* Glowing effect */
 }
 
 .project-card:hover .project-content {
@@ -270,50 +274,28 @@ nav {
 }
 
 /* Update buttons */
-.primary-button, .secondary-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.8rem 1.5rem;
-    border-radius: 30px;
-    font-family: var(--font-heading);
-    font-size: 1rem;
-    font-weight: 500;
-    text-decoration: none;
-    transition: all 0.3s ease;
-    cursor: pointer;
-    border: none;
-}
-
-.primary-button {
-    background-color: var(--accent-color);
-    color: white;
-}
-
-.secondary-button {
-    background-color: transparent;
-    color: var(--text-color);
-    border: 1px solid var(--text-color);
-}
-
-.primary-button:hover, .secondary-button:hover {
-    transform: translateY(-2px);
-}
-
-.primary-button:hover {
-    background-color: var(--accent-color);
-    box-shadow: 0 4px 15px rgba(var(--accent-color-rgb), 0.3);
-}
-
-.secondary-button:hover {
-    background-color: var(--text-color);
-    color: var(--bg-color);
-}
-
 .cta-buttons {
     display: flex;
     gap: 1rem;
     margin-top: 2rem;
+}
+
+.cta-buttons .primary-button,
+.cta-buttons .secondary-button {
+    background-color: var(--primary-color); /* Darker blue */
+    border: none;
+    color: #ffffff; /* White text */
+    padding: 10px 20px;
+    border-radius: 30px; /* Rounded buttons */
+    cursor: pointer;
+    transition: background-color 0.3s, box-shadow 0.3s;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+}
+
+.cta-buttons .primary-button:hover,
+.cta-buttons .secondary-button:hover {
+    background-color: var(--secondary-color); /* Lighter blue on hover */
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15); /* Enhanced shadow on hover */
 }
 
 /* Contact Section */
@@ -414,6 +396,11 @@ footer {
 }
 
 .experience-panel {
+    border: 1px solid var(--accent-color); /* Teal border */
+    border-radius: 10px; /* Rounded corners */
+    padding: 20px;
+    margin: 10px 0;
+    background-color: var(--gray-light); /* Light gray background */
     display: none;
     opacity: 0;
     transition: opacity 0.3s ease;
@@ -523,12 +510,11 @@ footer {
 }
 
 .skill-tag {
-    background: rgba(var(--accent-color-rgb), 0.1);
-    color: var(--accent-color);
-    padding: 0.4rem 0.8rem;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 500;
+    background-color: rgba(255, 165, 0, 0.2); /* Light orange background */
+    color: var(--accent-color); /* Bright orange text */
+    padding: 5px 10px;
+    border-radius: 20px; /* Rounded tags */
+    margin-right: 5px;
 }
 
 /* Animations */
@@ -808,7 +794,7 @@ footer {
     .project-image {
         width: 100%;
         max-height: 300px;
-        order: -1; /* Move image to top on mobile */
+        order: -1;
     }
 }
 
@@ -841,7 +827,7 @@ footer {
 
 .modal-content {
     position: relative;
-    background-color: var(--bg-color);
+    background-color: var(--bg-color); /* Keep white background for modal */
     margin: 2% auto;
     padding: 20px;
     width: 90%;
@@ -876,10 +862,10 @@ footer {
     position: absolute;
     bottom: 20px;
     right: 20px;
-    background-color: var(--accent-color);
+    background-color: var(--accent-color); /* Bright orange for download button */
     color: white;
     padding: 12px 24px;
-    border-radius: 30px;
+    border-radius: 30px; /* Rounded button */
     text-decoration: none;
     font-weight: 500;
     display: flex;
