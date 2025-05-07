@@ -2,17 +2,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Courier+Prime:wght@400;700&display=swap');
 
 :root {
-    --primary-color: hsl(210, 100%, 50%); /* Bright blue */
-    --secondary-color: hsl(40, 100%, 50%); /* Bright orange */
-    --accent-color: hsl(140, 100%, 50%); /* Neon green */
-    --text-color: hsl(0, 0%, 95%); /* Light text color */
-    --bg-color: hsl(0, 0%, 10%); /* Black background */
-    --gray-light: hsl(0, 0%, 20%); /* Dark gray for sections */
+    --primary-color: #111;
+    --secondary-color: #222;
+    --text-color: #111;
+    --bg-color: #fff;
+    --gray-light: #f5f5f5;
+    --border-color: #e0e0e0;
     --spacing: 8rem;
     
     /* Font families */
-    --font-heading: 'Courier Prime', monospace; /* Monospaced font for headings */
-    --font-body: 'Manrope', sans-serif; /* Main font */
+    --font-heading: 'Fira Mono', 'JetBrains Mono', 'Courier New', monospace;
+    --font-body: 'Inter', Arial, sans-serif;
 }
 
 * {
@@ -22,10 +22,10 @@
 }
 
 body {
-    background-color: var(--bg-color); /* Black background */
-    color: var(--text-color); /* Light text color */
-    font-family: var(--font-body); /* Main font */
-    line-height: 1.6;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-body);
+    line-height: 1.7;
 }
 
 .container {
@@ -37,27 +37,14 @@ body {
 /* Typography updates */
 h1, h2, h3 {
     font-family: var(--font-heading);
-    font-weight: 700; /* Thicker font weight */
-    color: var(--primary-color); /* Bright blue for headings */
+    color: var(--primary-color);
+    font-weight: 700;
+    letter-spacing: -0.02em;
 }
 
-h1 {
-    font-size: 4.5rem;
-    line-height: 1.1;
-    margin-bottom: 1.5rem;
-}
-
-h2 {
-    font-size: 2.5rem;
-    margin-bottom: 3rem;
-    color: var(--primary-color); /* Bright blue for h2 */
-}
-
-h3 {
-    font-size: 1.5rem;
-    margin-bottom: 1rem;
-    color: var(--primary-color); /* Bright blue for h3 */
-}
+h1 { font-size: 3rem; }
+h2 { font-size: 2rem; }
+h3 { font-size: 1.2rem; }
 
 .subtitle {
     font-size: 1.5rem;
@@ -70,9 +57,10 @@ nav {
     position: fixed;
     top: 0;
     width: 100%;
-    background: rgba(0, 0, 0, 0.8);
+    background: var(--bg-color);
     z-index: 1000;
-    border-bottom: 1px solid var(--gray-light);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: none;
 }
 
 .nav-container {
@@ -86,8 +74,8 @@ nav {
 }
 
 .logo {
+    font-family: var(--font-heading);
     font-size: 1.5rem;
-    font-weight: 600;
     color: var(--primary-color);
 }
 
@@ -97,14 +85,16 @@ nav {
 }
 
 .nav-links a {
+    color: var(--primary-color);
+    font-family: var(--font-heading);
+    font-weight: 600;
     text-decoration: none;
-    color: var(--primary-color); /* Bright blue for nav links */
-    font-weight: 500;
-    transition: color 0.3s;
+    margin-left: 2rem;
+    transition: color 0.2s;
 }
 
 .nav-links a:hover {
-    color: var(--secondary-color); /* Bright orange on hover */
+    color: var(--secondary-color);
 }
 
 /* Hero Section */
@@ -214,18 +204,19 @@ nav {
 }
 
 .project-card {
-    border: 1px solid var(--accent-color); /* Bright orange border */
-    border-radius: 10px; /* Rounded corners */
-    background-color: #1e1e1e; /* Black background for project cards */
-    overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-    transition: transform 0.3s;
-    position: relative; /* For absolute positioning of description */
+    background: var(--bg-color);
+    color: var(--primary-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 2rem;
+    font-family: var(--font-body);
+    box-shadow: none;
+    transition: border 0.2s;
 }
 
-/* Expand effect on hover */
 .project-card:hover {
-    transform: scale(1.05); /* Slight zoom effect */
+    border: 1.5px solid var(--secondary-color);
 }
 
 .project-card:hover .project-content {
@@ -253,7 +244,7 @@ nav {
 
 .article-date {
     font-family: var(--font-heading);
-    color: var(--accent-color);
+    color: var(--primary-color);
     font-size: 0.9rem;
     font-weight: 500;
 }
@@ -263,7 +254,7 @@ nav {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    color: var(--accent-color);
+    color: var(--primary-color);
     text-decoration: none;
     font-weight: 500;
     transition: all 0.3s;
@@ -281,28 +272,34 @@ nav {
 }
 
 .cta-buttons .primary-button,
-.cta-buttons .secondary-button {
-    background-color: var(--primary-color); /* Bright blue */
-    border: none;
-    color: #ffffff; /* White text */
-    padding: 10px 20px;
-    border-radius: 30px; /* Rounded buttons */
+.cta-buttons .secondary-button,
+.primary-button {
+    background: none;
+    border: 2px solid var(--primary-color);
+    color: var(--primary-color);
+    font-family: var(--font-heading);
+    border-radius: 8px;
+    padding: 10px 24px;
+    font-size: 1rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: background-color 0.3s, box-shadow 0.3s;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+    margin-right: 1rem;
+    transition: background 0.2s, color 0.2s;
 }
 
 .cta-buttons .primary-button:hover,
-.cta-buttons .secondary-button:hover {
-    background-color: var(--secondary-color); /* Bright orange on hover */
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15); /* Enhanced shadow on hover */
+.cta-buttons .secondary-button:hover,
+.primary-button:hover {
+    background: var(--primary-color);
+    color: #fff;
 }
 
 /* Contact Section */
 #contact {
-    padding: var(--spacing) 0;
-    background: hsl(0, 0%, 15%); /* Darker background for a professional look */
-    color: hsl(0, 0%, 90%); /* Light gray text for better readability */
+    padding: 4rem 0;
+    background: var(--bg-color);
+    color: var(--primary-color);
+    border-top: 1px solid var(--border-color);
 }
 
 .contact-content {
@@ -324,14 +321,17 @@ nav {
 }
 
 .social-links a {
-    color: hsl(0, 0%, 90%); /* Light gray for icons */
-    font-size: 1.5rem;
-    transition: transform 0.3s, color 0.3s;
+    color: var(--primary-color);
+    opacity: 0.7;
+    font-family: var(--font-heading);
+    font-size: 1.1rem;
+    margin-right: 1.5rem;
+    text-decoration: none;
+    transition: opacity 0.2s;
 }
 
 .social-links a:hover {
-    color: var(--primary-color); /* Change to primary color on hover */
-    transform: translateY(-2px);
+    opacity: 1;
 }
 
 /* Update button styles */
@@ -353,16 +353,18 @@ nav {
 
 /* Footer */
 footer {
-    padding: 2rem 0;
-    background: var(--secondary-color);
-    color: white;
+    padding: 2rem 0 1rem 0;
+    background: var(--bg-color);
+    color: var(--secondary-color);
     text-align: center;
+    font-size: 0.95rem;
+    border-top: 1px solid var(--border-color);
 }
 
 /* Experience Section Styles */
 #experience {
     padding: var(--spacing) 0;
-    background: var(--bg-color); /* Black background */
+    background: var(--bg-color); /* White background */
 }
 
 .experience-container {
@@ -375,18 +377,19 @@ footer {
 
 /* Experience Panel Styles */
 .experience-panel {
-    background-color: var(--gray-light); /* Dark gray for panels */
-    border-radius: 10px; /* Rounded corners */
-    padding: 20px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); /* Subtle shadow */
-    transition: transform 0.3s;
-    position: relative; /* For absolute positioning of description */
-    overflow: hidden; /* Hide overflow */
+    background: var(--bg-color);
+    color: var(--primary-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 2rem;
+    font-family: var(--font-body);
+    box-shadow: none;
+    transition: border 0.2s;
 }
 
-/* Expand effect on hover */
 .experience-panel:hover {
-    transform: scale(1.05); /* Slight zoom effect */
+    border: 1.5px solid var(--secondary-color);
 }
 
 /* Hide experience details by default */
@@ -425,13 +428,13 @@ footer {
 }
 
 .company-name {
-    color: var(--text-color);
+    color: var(--primary-color);
     font-weight: 500;
     margin-bottom: 0.25rem;
 }
 
 .duration, .location {
-    color: var(--text-color);
+    color: var(--primary-color);
     opacity: 0.7;
     font-size: 0.9rem;
     margin-bottom: 0.25rem;
@@ -442,15 +445,16 @@ footer {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
 }
 
 .skill-tag {
-    background-color: rgba(255, 165, 0, 0.2); /* Light orange background */
-    color: var(--accent-color); /* Bright orange text */
-    padding: 5px 10px;
-    border-radius: 20px; /* Rounded tags */
-    margin-right: 5px;
+    background: var(--gray-light);
+    color: var(--primary-color);
+    font-family: var(--font-heading);
+    border-radius: 6px;
+    padding: 2px 10px;
+    font-size: 0.95em;
 }
 
 /* Achievement List */
@@ -462,15 +466,14 @@ footer {
 .achievement-list li {
     position: relative;
     padding-left: 1.5rem;
-    margin-bottom: 1rem;
-    line-height: 1.7;
+    margin-bottom: 0.7rem;
 }
 
 /* Main bullet points */
-.achievement-list > li > .achievement-bullet {
+.achievement-bullet {
     position: absolute;
     left: 0;
-    color: var(--accent-color);
+    color: var(--secondary-color);
 }
 
 /* Responsive Design */
@@ -507,8 +510,8 @@ footer {
 }
 
 .category-btn:hover, .category-btn.active {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
+    background: var(--primary-color);
+    border-color: var(--primary-color);
     color: white;
 }
 
@@ -550,7 +553,7 @@ footer {
 
 .project-description {
     font-size: 1.1rem;
-    color: var(--text-color);
+    color: var(--primary-color);
     opacity: 0.8;
     line-height: 1.6;
 }
@@ -562,14 +565,14 @@ footer {
 }
 
 .project-links a {
-    color: var(--text-color);
+    color: var(--primary-color);
     font-size: 1.4rem;
     opacity: 0.7;
     transition: all 0.3s;
 }
 
 .project-links a:hover {
-    color: var(--accent-color);
+    color: var(--primary-color);
     opacity: 1;
     transform: translateY(-2px);
 }
@@ -597,8 +600,8 @@ footer {
 
 .tech-tag {
     padding: 0.5rem 1rem;
-    background: rgba(var(--accent-color-rgb), 0.08);
-    color: var(--accent-color);
+    background: rgba(var(--primary-color-rgb), 0.08);
+    color: var(--primary-color);
     border-radius: 2rem;
     font-size: 0.9rem;
     font-weight: 500;
@@ -686,7 +689,7 @@ footer {
     position: absolute;
     right: 25px;
     top: 10px;
-    color: var(--text-color);
+    color: var(--primary-color);
     font-size: 35px;
     font-weight: bold;
     cursor: pointer;
@@ -694,7 +697,7 @@ footer {
 }
 
 .close-modal:hover {
-    color: var(--accent-color);
+    color: var(--secondary-color);
 }
 
 #resume-iframe {
@@ -707,7 +710,7 @@ footer {
     position: absolute;
     bottom: 20px;
     right: 20px;
-    background-color: var(--accent-color); /* Bright orange for download button */
+    background-color: var(--primary-color); /* Deep black for download button */
     color: white;
     padding: 12px 24px;
     border-radius: 30px; /* Rounded button */
@@ -738,4 +741,34 @@ footer {
         padding: 8px 16px;
         font-size: 0.9rem;
     }
+}
+
+.articles-list {
+    list-style: none;
+    padding: 0;
+    margin: 2rem 0;
+}
+
+.articles-list li {
+    margin-bottom: 1.5rem;
+    font-size: 1.08rem;
+}
+
+.articles-list a {
+    font-family: 'Fira Mono', monospace;
+    color: #111;
+    text-decoration: underline;
+    transition: color 0.2s;
+}
+
+.articles-list a:hover {
+    color: #0056b3;
+}
+
+.article-meta {
+    display: block;
+    font-size: 0.95em;
+    color: #666;
+    margin-top: 0.2em;
+    font-family: 'Inter', Arial, sans-serif;
 } 

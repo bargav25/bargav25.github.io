@@ -7,16 +7,18 @@
     <link rel="stylesheet" href="./style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <nav>
         <div class="nav-container">
             <div class="logo">BJ</div>
             <div class="nav-links">
-                <a href="#experience">Experience</a>
-                <a href="#projects">Projects</a>
-                <a href="#articles">Articles</a>
-                <a href="#contact">Contact</a>
+                <a href="index.html">Home</a>
+                <a href="experience.html">Experience</a>
+                <a href="projects.html">Projects</a>
+                <a href="articles.html">Articles</a>
+                <a href="index.html#contact">Contact</a>
             </div>
         </div>
     </nav>
@@ -30,11 +32,13 @@
                         <p class="subtitle">Machine Learning Engineer</p>
                         <div class="profile-info">
                             <div class="profile-text">
-                                <p>Specialized in Time Series, LLMs and 3D Computer Vision</p>
+                                <p>Currently a recent grad living in Boston. Working as an MLE at BU. One can say I'm interested in Large Machine Learning Models, like really really large.
+                                    In my free time, I code, bike and watch lots of movies (sometime anime).
+                                </p>
                                 <br>
                                 <div class="cta-buttons">
-                                    <a href="#experience" class="primary-button">View Experience</a>
-                                    <button class="secondary-button" id="resume-btn">View Resume</button>
+                                    <a href="experience.html" class="primary-button">View Experience</a>
+                                    <a href="https://drive.google.com/file/d/1v8kWToRKI17P92xjMfh7h8SwtVHtA7jy/view?usp=drive_link" class="secondary-button" target="_blank" rel="noopener">View Resume</a>
                                     <a href="#contact" class="secondary-button">Get in Touch</a>
                                 </div>
                             </div>
@@ -45,310 +49,7 @@
                     </div>
                 </div>
             </div>
-            <div class="hero-background">
-                <div class="gradient-circle"></div>
-                <div class="gradient-circle"></div>
-            </div>
         </section>
-
-        <section id="experience">
-            <div class="container">
-                <h2>Experience</h2>
-                <div class="experience-container">
-                    <div class="experience-content">
-                        <div class="experience-panel" data-company="bu">
-                            <div class="experience-header">
-                                <div class="company-info">
-                                    <img src="./logos/bumed_logo.jpg" alt="Boston University" class="company-logo">
-                                    <div>
-                                        <h3>Research Scientist</h3>
-                                        <p class="company-name">Chobanian & Avedisian School of Medicine, Boston University</p>
-                                        <p class="duration">May 2024 - Present</p>
-                                        <p class="location">Boston, MA</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="skills-container">
-                                <div class="skill-tag">PyTorch</div>
-                                <div class="skill-tag">Time Series</div>
-                                <div class="skill-tag">LLMs</div>
-                                <div class="skill-tag">RAG</div>
-                                <div class="skill-tag">Healthcare AI</div>
-                            </div>
-                            <div class="experience-details">
-                                <ul class="achievement-list">
-                                    <li>
-                                        <span class="achievement-bullet">▹</span>
-                                        Engineered attention-based imputation models for Alzheimer's patient data on longitudinal cognitive assessments (GERAS and HRS), achieving 0.43 MAE (US) and 0.44 MAE (EU) in GERAS, 15% improvement over previous methods.
-                                    </li>
-                                    <li>
-                                        <span class="achievement-bullet">▹</span>
-                                        Further evaluated imputation models using several downstream tasks like forecasting and statistical analyses.
-                                    </li>
-                                    <li>
-                                        <span class="achievement-bullet">▹</span>
-                                        Developed and deployed a clinical RAG-based chatbot using DeepSeek-R1 and vLLM, integrating with ClinicalTrials.gov data to provide real-time information access.
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-
-                        <div class="experience-panel" data-company="ola">
-                            <div class="experience-header">
-                                <div class="company-info">
-                                    <img src="logos/ola_logo.png" alt="OLA" class="company-logo">
-                                    <div>
-                                        <h3>Data Scientist (Machine Learning Engineer)</h3>
-                                        <p class="company-name">OLA, ANI Technologies</p>
-                                        <p class="duration">Feb 2022 - July 2023</p>
-                                        <p class="location">Bangalore, India</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="skills-container">
-                                <div class="skill-tag">PyTorch</div>
-                                <div class="skill-tag">MLOps</div>
-                                <div class="skill-tag">GNN</div>
-                                <div class="skill-tag">LSTM</div>
-                                <div class="skill-tag">Kubernetes</div>
-                            </div>
-                            <div class="experience-details">
-                                <ul class="achievement-list">
-                                    <li>
-                                        <span class="achievement-bullet">▹</span>
-                                        Led end-to-end development and production deployment of dynamic pricing and rider-driver matching ML models for OLA Cabs, driving a 6% GMV increase across the platform.
-                                    </li>
-                                    <li>
-                                        <span class="achievement-bullet">▹</span>
-                                        Built comprehensive MLOps infrastructure for these models, including automated retraining pipelines, drift detection systems, and performance monitoring dashboards to ensure production reliability.
-                                    </li>
-                                    <li>
-                                        <span class="achievement-bullet">▹</span>
-                                        Implemented rigorous shadow analysis and A/B testing methodologies, significantly reducing deployment failures across cities throughout India.
-                                    </li>
-                                    <li>
-                                        <span class="achievement-bullet">▹</span>
-                                        Architected and deployed an LSTM-based proximity unlock system (97% accuracy) for the Android HMI of eBikes, integrating ML models with embedded systems.
-                                    </li>
-                                    <li>
-                                        <span class="achievement-bullet">▹</span>
-                                        Developed a Graph Neural Network ETA prediction model achieving a 1.3-minute MAE overall, with significant improvements for short-distance driver arrival estimates.
-                                    </li>
-                                    <li>
-                                        <span class="achievement-bullet">▹</span>
-                                        Deployed a customer support chatbot (96% intent accuracy) using GitLab CI/CD, Kubernetes, and Vue.js.
-                                    </li>
-                                </ul>
-                            </div>                        
-                        </div>
-
-                        <div class="experience-panel" data-company="samsung">
-                            <div class="experience-header">
-                                <div class="company-info">
-                                    <img src="logos/samsung_logo.png" alt="samsung" class="company-logo">
-                                    <div>
-                                        <h3>Edge AI Intern</h3>
-                                        <p class="company-name">Samsung Research</p>
-                                        <p class="duration">May 2021 - July 2021</p>
-                                        <p class="location">Bangalore, India</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="skills-container">
-                                <div class="skill-tag">Java</div>
-                                <div class="skill-tag">SQLite</div>
-                                <div class="skill-tag">C</div>
-                                <div class="skill-tag">FFmpeg</div>
-                                <div class="skill-tag">Android</div>
-                            </div>
-                            <div class="experience-details">
-                                <ul class="achievement-list">
-                                    <li>
-                                        <span class="achievement-bullet">▹</span>
-                                        Designed an SQLite database to store clip metadata and implemented several Java functions (Android interface) for efficient management and storage of smart home security clips on edge devices.
-                                    </li>
-                                    <li>
-                                        <span class="achievement-bullet">▹</span>
-                                        Developed performance-optimized native C code using FFmpeg to convert H264-encoded videos to JPEG/PNG images for thumbnail extraction.
-                                    </li>
-                                </ul>
-                            </div>                              
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section id="projects">
-            <div class="container">
-                <h2>Featured Projects</h2>
-                
-                <!-- Project category tabs -->
-                <div class="project-categories">
-                    <button class="category-btn active" data-category="all">All</button>
-                    <button class="category-btn" data-category="ml">Machine Learning</button>
-                    <button class="category-btn" data-category="cv">Computer Vision</button>
-                    <button class="category-btn" data-category="nlp">NLP</button>
-                </div>
-
-                <div class="projects-grid">
-                    <article class="project-card" data-category="cv">
-                        <div class="project-content">
-                            <div class="project-main">
-                                <div class="project-header">
-                                    <div class="project-title">
-                                        <h3>Dynamic NeRF for Real-Time 3D Scene Reconstruction</h3>
-                                        <div class="project-links">
-                                            <a href="https://github.com/bargav25/RatNeRF" class="link-item" target="_blank">
-                                                <i class="fab fa-github"></i>
-                                            </a>
-                                            <a href="https://medium.com/@bargav25/keypointnerf-..." class="link-item" target="_blank">
-                                                <i class="fab fa-medium"></i>
-                                            </a>
-                                        </div>
-                                    </div>
-                                    <p class="project-description">
-                                        A Novel Approach to 3D Motion Capture Using Neural Radiance Fields
-                                    </p>
-                                </div>
-
-                                <div class="project-details">
-                                    <div class="key-features">
-                                        <h4>Key Features</h4>
-                                        <ul>
-                                            <li>Dynamic NeRF pipeline to reconstruct 3D shapes and motions from monocular videos using 3D keypoints.</li>
-                                            <li>Enabled generation of custom 3D animations for dynamic scenes using only keypoint data.</li>
-                                            <li>Improved rendering speed</li>
-                                        </ul>
-                                    </div>
-                                    
-                                    <div class="tech-stack">
-                                        <div class="tech-tag">PyTorch</div>
-                                        <div class="tech-tag">CUDA</div>
-                                        <div class="tech-tag">Computer Vision</div>
-                                        <div class="tech-tag">NeRF</div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="project-image">
-                                <img src="./images/ratnerf.png" alt="Project Preview">
-                            </div>
-                        </div>
-                    </article>
-
-                    <!-- Add more project cards with the same structure -->
-
-                    <article class="project-card" data-category="nlp">
-                        <div class="project-content">
-                            <div class="project-main">
-                                <div class="project-header">
-                                    <div class="project-title">
-                                        <h3>SmolLM - Implementation, SFT and RLHF</h3>
-                                        <div class="project-links">
-                                            <a href="https://github.com/bargav25/SmolLM" class="link-item" target="_blank">
-                                                <i class="fab fa-github"></i>
-                                            </a>
-                                        </div>
-                                    </div>
-                                    <p class="project-description">
-                                        Lightweight implementation of the famous smolLM, using PyTorch, and finetuning it to make an Intelligent Grammar Bot
-                                    </p>
-                                </div>
-
-                                <div class="project-details">
-                                    <div class="key-features">
-                                        <h4>Key Features</h4>
-                                        <ul>
-                                            <li>Rotary Positional Embeddings</li>
-                                            <li>Grouped-query attention</li>
-                                            <li>Fine-tuned SmolLM and optimized with DPO and KTO to deliver accurate, context-aware grammar corrections. </li>
-                                        </ul>
-                                    </div>
-                                    
-                                    <div class="tech-stack">
-                                        <div class="tech-tag">PyTorch</div>
-                                        <div class="tech-tag">CUDA</div>
-                                        <div class="tech-tag">LLMs</div>
-                                        <div class="tech-tag">Hugging Face</div>
-                                        <div class="tech-tag">TRL</div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="project-image">
-                                <img src="./images/smollm.jpeg" alt="Project Preview">
-                            </div>
-                        </div>
-                    </article>
-
-                    <article class="project-card" data-category="ml">
-                        <div class="project-content">
-                            <div class="project-main">
-                                <div class="project-header">
-                                    <div class="project-title">
-                                        <h3>eBike Finder</h3>
-                                        <div class="project-links">
-                                            <a href="https://github.com/bargav25/ebike-finder" class="link-item" target="_blank">
-                                                <i class="fab fa-github"></i>
-                                            </a>
-                                            <a href="https://onebike.app/" class="link-item" target="_blank">
-                                                <i class="fab fa-solid fa-link"></i>
-                                            </a>
-                                        </div>
-                                    </div>
-                                    <p class="project-description">
-                                        Predicts the availability of e-bikes at Bluebikes stations across Boston.
-                                    </p>
-                                </div>
-
-                                <div class="project-details">
-                                    <div class="key-features">
-                                        <h4>Key Features</h4>
-                                        <ul>
-                                            <li>Real-Time Predictions: Instantly predicts the availability of e-bikes at a selected Bluebikes station.</li>
-                                            <li>User-Friendly Interface: The interface, built with Gradio, allows users to easily select a station and view predictions.</li>
-                                            <li>Scalable & Fast: Processes incoming data and delivers results with minimal delay, ensuring up-to-date information.</li>
-                                            <li>Historical Insights: Incorporates historical data to improve prediction accuracy.</li>
-
-                                        </ul>
-                                    </div>
-                                    
-                                    <div class="tech-stack">
-                                        <div class="tech-tag">Python</div>
-                                        <div class="tech-tag">AWS Lambda</div>
-                                        <div class="tech-tag">S3</div>
-                                        <div class="tech-tag">EC2</div>
-                                        <div class="tech-tag">XGBoost</div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="project-image">
-                                <img src="./images/bluebikes.png" alt="Project Preview">
-                            </div>
-                        </div>
-                    </article>
-
-                </div>
-            </div>
-        </section>
-
-        <!-- <section id="articles">
-            <div class="container">
-                <h2>Articles </h2>
-                <div class="articles-grid">
-                    <article class="article-card">
-                        <div class="article-content">
-                            <span class="article-date">Mar 2024</span>
-                            <h3>Article Title</h3>
-                            <p>Brief description of the article content...</p>
-                            <a href="#" class="read-more">Read Article →</a>
-                        </div>
-                    </article>
-                </div>
-            </div>
-        </section> -->
 
         <section id="contact">
             <div class="container">
@@ -382,17 +83,6 @@
         </div>
     </footer>
 
-    <div id="resume-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-modal">&times;</span>
-            <object data="resume.pdf" type="application/pdf" width="100%" height="100%">
-                <p>Unable to display PDF file. <a href="resume.pdf" download>Download</a> instead.</p>
-            </object>
-            <a href="resume.pdf" download class="download-button">
-                <i class="fas fa-download"></i> Download PDF
-            </a>
-        </div>
-    </div>
 
     <script src="./script.js"></script>
 </body>
