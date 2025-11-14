@@ -496,6 +496,92 @@ footer {
     color: var(--secondary-color);
 }
 
+/* Achievements Section */
+#achievements {
+    padding: var(--spacing) 0;
+    background: var(--wp--preset--color--background);
+}
+
+#achievements h2 {
+    margin-bottom: 3rem;
+    font-size: 2rem;
+    color: var(--primary-color);
+    font-family: var(--font-heading);
+}
+
+.achievements-list {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.achievement-item {
+    margin-bottom: 3rem;
+    padding-bottom: 3rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.achievement-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.achievement-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.achievement-badge {
+    display: inline-block;
+    padding: 0.4rem 0.9rem;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: var(--font-heading);
+    flex-shrink: 0;
+}
+
+.achievement-item h3 {
+    font-size: 1.4rem;
+    margin: 0;
+    color: var(--primary-color);
+    font-family: var(--font-heading);
+    font-weight: 700;
+}
+
+.achievement-description {
+    font-size: 1rem;
+    color: var(--text-color);
+    line-height: 1.7;
+    margin: 0.8rem 0;
+    font-family: var(--font-body);
+}
+
+.achievement-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--wp--preset--color--tertiary);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-top: 0.5rem;
+    transition: all 0.2s ease;
+    font-family: var(--font-heading);
+}
+
+.achievement-link:hover {
+    color: var(--primary-color);
+}
+
+.achievement-link i {
+    font-size: 0.8rem;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .experience-container {
