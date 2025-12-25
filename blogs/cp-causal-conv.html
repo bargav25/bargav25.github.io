@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.24">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Bargav Jagatha">
+<meta name="dcterms.date" content="2025-12-23">
+
+<title>Making Causal Convolution Fly: A Deep Dive into Context Parallelism</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="cp-causal-conv_files/libs/clipboard/clipboard.min.js"></script>
+<script src="cp-causal-conv_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="cp-causal-conv_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="cp-causal-conv_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="cp-causal-conv_files/libs/quarto-html/popper.min.js"></script>
+<script src="cp-causal-conv_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="cp-causal-conv_files/libs/quarto-html/anchor.min.js"></script>
+<link href="cp-causal-conv_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="cp-causal-conv_files/libs/quarto-html/quarto-syntax-highlighting-dc55a5b9e770e841cd82e46aadbfb9b0.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="cp-causal-conv_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="cp-causal-conv_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="cp-causal-conv_files/libs/bootstrap/bootstrap-d6a003b94517c951b2d65075d42fb01b.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="blog-style.css">
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#tldr" id="toc-tldr" class="nav-link active" data-scroll-target="#tldr">TL;DR</a>
+  <ul class="collapse">
+  <li><a href="#acknowledgments" id="toc-acknowledgments" class="nav-link" data-scroll-target="#acknowledgments">Acknowledgments</a></li>
+  </ul></li>
+  <li><a href="#the-setup-whats-context-parallelism-anyway" id="toc-the-setup-whats-context-parallelism-anyway" class="nav-link" data-scroll-target="#the-setup-whats-context-parallelism-anyway">The Setup: What’s Context Parallelism Anyway?</a></li>
+  <li><a href="#forward-pass-from-naive-to-optimized" id="toc-forward-pass-from-naive-to-optimized" class="nav-link" data-scroll-target="#forward-pass-from-naive-to-optimized">Forward Pass: From Naive to Optimized</a>
+  <ul class="collapse">
+  <li><a href="#naive-forward-just-concatenate-what-all-you-need" id="toc-naive-forward-just-concatenate-what-all-you-need" class="nav-link" data-scroll-target="#naive-forward-just-concatenate-what-all-you-need">Naive Forward: “Just Concatenate what all you need!”</a>
+  <ul class="collapse">
+  <li><a href="#the-problem-memory-bandwidth-is-expensive" id="toc-the-problem-memory-bandwidth-is-expensive" class="nav-link" data-scroll-target="#the-problem-memory-bandwidth-is-expensive">The Problem: Memory Bandwidth is Expensive!</a></li>
+  </ul></li>
+  <li><a href="#optimized-forward-boundary-correction-ftw" id="toc-optimized-forward-boundary-correction-ftw" class="nav-link" data-scroll-target="#optimized-forward-boundary-correction-ftw">Optimized Forward: Boundary Correction FTW</a>
+  <ul class="collapse">
+  <li><a href="#why-this-is-beautiful" id="toc-why-this-is-beautiful" class="nav-link" data-scroll-target="#why-this-is-beautiful">Why This is Beautiful</a></li>
+  </ul></li>
+  </ul></li>
+  <li><a href="#backward-pass-where-things-get-spicy" id="toc-backward-pass-where-things-get-spicy" class="nav-link" data-scroll-target="#backward-pass-where-things-get-spicy">Backward Pass: Where Things Get Spicy</a>
+  <ul class="collapse">
+  <li><a href="#naive-backward-the-padding-dilemma" id="toc-naive-backward-the-padding-dilemma" class="nav-link" data-scroll-target="#naive-backward-the-padding-dilemma">Naive Backward: The Padding Dilemma</a></li>
+  <li><a href="#optimized-backward-add-two-tiny-convolutions" id="toc-optimized-backward-add-two-tiny-convolutions" class="nav-link" data-scroll-target="#optimized-backward-add-two-tiny-convolutions">Optimized Backward: Add Two Tiny Convolutions</a>
+  <ul class="collapse">
+  <li><a href="#the-dw-correction-why-zero-padding-works" id="toc-the-dw-correction-why-zero-padding-works" class="nav-link" data-scroll-target="#the-dw-correction-why-zero-padding-works">The dw Correction: Why Zero Padding Works</a></li>
+  </ul></li>
+  </ul></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Making Causal Convolution Fly: A Deep Dive into Context Parallelism</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Bargav Jagatha </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">December 23, 2025</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="tldr" class="level1">
+<h1>TL;DR</h1>
+<p>When you’re training long-context models with causal convolutions (think Mamba, DeltaNet), splitting sequences across GPUs sounds simple until you realize: <strong>each position needs context from its neighbors</strong>. The naive solution? Concatenate halos with your shards. The problem? You’re creating massive tensors and wasting memory bandwidth.</p>
+<p>In this post, I’ll show you how to get Context Parallelism (CP) working with minimal overhead by being clever about boundary corrections. We’ll go from naive implementations to optimized versions for both forward and backward passes.</p>
+<p><strong>Spoiler:</strong> The trick is realizing that when your kernel width W=4 and your shard size is 128k+ tokens, you don’t need to concat halo with your gigantic shard and process the entire extended shard—just fix the tiny boundary region that actually needs the halo!</p>
+<hr>
+<section id="acknowledgments" class="level2">
+<h2 class="anchored" data-anchor-id="acknowledgments">Acknowledgments</h2>
+<p>This work comes from our teamwork at the <strong>GPU MODE IRL Hackathon 2025</strong>, where we implemented context parallelism on Gated DeltaNet (but without short convolutions). Later on, inspired by an idea suggested by Garret Goon about trading off memory bandwidth with tiny convolutions, I wrote this code.</p>
+<p><strong>Hackathon Team:</strong> Garret Goon, Matt Gleeson, Baladhurgesh, Noyonika and Me (Bargav)</p>
+<hr>
+</section>
+</section>
+<section id="the-setup-whats-context-parallelism-anyway" class="level1">
+<h1>The Setup: What’s Context Parallelism Anyway?</h1>
+<p>You’ve got a sequence of length T=1024 tokens and 4 GPUs. Easy, right? Each GPU gets 256 tokens.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Naive sharding (THIS DOESN'T WORK!)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>T <span class="op">=</span> <span class="dv">1024</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>world_size <span class="op">=</span> <span class="dv">4</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>shard_size <span class="op">=</span> T <span class="op">//</span> world_size  <span class="co"># 256 per GPU</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Rank 0: x[0:256]</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Rank 1: x[256:512]  </span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Rank 2: x[512:768]</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Rank 3: x[768:1024]</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>But wait—causal convolution isn’t elementwise! Position <code>t</code> needs to see positions <code>[t-W+1 : t+1]</code>:</p>
+<p><span class="math display">\[
+y[t] = \sum_{k=0}^{W-1} w[k] \cdot x[t-k]
+\]</span></p>
+<p>For W=4, position 256 (first token in Rank 1) needs to see x[253:257], but x[253:256] lives on Rank 0! Bummer !</p>
+<p>This is where the <strong>halo exchange</strong> pattern comes in.</p>
+<hr>
+</section>
+<section id="forward-pass-from-naive-to-optimized" class="level1">
+<h1>Forward Pass: From Naive to Optimized</h1>
+<section id="naive-forward-just-concatenate-what-all-you-need" class="level2">
+<h2 class="anchored" data-anchor-id="naive-forward-just-concatenate-what-all-you-need">Naive Forward: “Just Concatenate what all you need!”</h2>
+<p>The simplest solution: get the halo from your left neighbor, concatenate it with your shard, run convolution, extract the valid part.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> naive_cp_forward(x_shard, weight, rank, world_size):</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">    The straightforward approach that actually works...</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">    but at what cost?</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    B, Ts, D <span class="op">=</span> x_shard.shape</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    W <span class="op">=</span> weight.shape[<span class="dv">1</span>]</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Exchange LEFT x-halo</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    x_halo_left <span class="op">=</span> torch.zeros(B, W<span class="op">-</span><span class="dv">1</span>, D, device<span class="op">=</span>x_shard.device)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Receive from left neighbor</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        recv_req <span class="op">=</span> dist.irecv(x_halo_left, src<span class="op">=</span>rank<span class="op">-</span><span class="dv">1</span>)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&lt;</span> world_size <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Send to right neighbor</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        send_req <span class="op">=</span> dist.isend(</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>            x_shard[:, <span class="op">-</span>(W<span class="op">-</span><span class="dv">1</span>):, :].contiguous(), </span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>            dst<span class="op">=</span>rank<span class="op">+</span><span class="dv">1</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Wait for communication (blocking!)</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>        recv_req.wait()</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&lt;</span> world_size <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>        send_req.wait()</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Concatenate: [B, W-1+Ts, D] 🚨 LARGE TENSOR CREATED</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        x_extended <span class="op">=</span> torch.cat([x_halo_left, x_shard], dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>        x_extended <span class="op">=</span> x_shard</span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Run convolution on extended input</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>    out_extended, _ <span class="op">=</span> causal_conv1d_fwd(x_extended, weight)</span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Extract valid portion (discard halo region)</span></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>        out_shard <span class="op">=</span> out_extended[:, (W<span class="op">-</span><span class="dv">1</span>):, :]  <span class="co"># [B, Ts, D]</span></span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>        out_shard <span class="op">=</span> out_extended</span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> out_shard</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<section id="the-problem-memory-bandwidth-is-expensive" class="level3">
+<h3 class="anchored" data-anchor-id="the-problem-memory-bandwidth-is-expensive">The Problem: Memory Bandwidth is Expensive!</h3>
+<p>Let’s do the math: - Shard size: <code>Ts = 256</code> tokens - Halo size: <code>W-1 = 3</code> tokens - Extended size: <code>259</code> tokens - <strong>Overhead: Reading and processing 259 instead of 256</strong></p>
+<p>Wait, that doesn’t sound bad! But here’s the thing, if Ts = 128k</p>
+<p><strong>We’re creating a large tensor by concatenating to correct only 3 outputs!</strong></p>
+<hr>
+</section>
+</section>
+<section id="optimized-forward-boundary-correction-ftw" class="level2">
+<h2 class="anchored" data-anchor-id="optimized-forward-boundary-correction-ftw">Optimized Forward: Boundary Correction FTW</h2>
+<p>Here’s the key insight: <strong>Only the first W-1 outputs are wrong. Let’s just fix those!</strong></p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> optimized_cp_forward(x_shard, weight, rank, world_size):</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co">    The production version: minimal I/O, overlapped communication</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co">    Key idea: Don't extend the entire shard. Just fix the boundary!</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    B, Ts, D <span class="op">=</span> x_shard.shape</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    W <span class="op">=</span> weight.shape[<span class="dv">1</span>]</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    halo_shape <span class="op">=</span> (B, W<span class="op">-</span><span class="dv">1</span>, D)</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    x_halo_left <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    recv_req <span class="op">=</span> send_req <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 1: Initiate NON-BLOCKING halo exchange</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        x_halo_left <span class="op">=</span> torch.empty(halo_shape, device<span class="op">=</span>x_shard.device, dtype<span class="op">=</span>x_shard.dtype)</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        recv_req <span class="op">=</span> dist.irecv(x_halo_left, src<span class="op">=</span>rank<span class="op">-</span><span class="dv">1</span>)</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&lt;</span> world_size <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        send_req <span class="op">=</span> dist.isend(</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>            x_shard[:, <span class="op">-</span>(W<span class="op">-</span><span class="dv">1</span>):, :].contiguous(), </span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>            dst<span class="op">=</span>rank<span class="op">+</span><span class="dv">1</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 2: Compute local convolution (WHILE COMMUNICATION HAPPENS!)</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    <span class="co"># First W-1 outputs will be wrong, but that's okay - we'll fix them</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    out_shard, _ <span class="op">=</span> causal_conv1d_fwd(x_shard, weight)</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 3: Wait for halo exchange to complete</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> recv_req <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>        recv_req.wait()</span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> send_req <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>        send_req.wait()</span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 4: Boundary correction - only fix first W-1 positions</span></span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&gt;</span> <span class="dv">0</span> <span class="kw">and</span> x_halo_left <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Create a TINY window: [halo | first W-1 of shard]</span></span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Shape: [B, 2*(W-1), D] = [B, 6, D] for W=4</span></span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>        x_bndr <span class="op">=</span> torch.cat([</span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>            x_halo_left,              <span class="co"># [B, 3, D]</span></span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>            x_shard[:, :(W<span class="op">-</span><span class="dv">1</span>), :]     <span class="co"># [B, 3, D]</span></span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>        ], dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Recompute ONLY the boundary outputs</span></span>
+<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>        halo_out, _ <span class="op">=</span> causal_conv1d_fwd(x_bndr, weight)</span>
+<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Replace the incorrect outputs with correct ones</span></span>
+<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a>        <span class="co"># We want positions W-1 to 2*(W-1)-1 from halo_out</span></span>
+<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a>        out_shard[:, :(W<span class="op">-</span><span class="dv">1</span>)] <span class="op">=</span> halo_out[:, (W<span class="op">-</span><span class="dv">1</span>):]</span>
+<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> out_shard</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<section id="why-this-is-beautiful" class="level3">
+<h3 class="anchored" data-anchor-id="why-this-is-beautiful">Why This is Beautiful</h3>
+<!-- **Memory I/O Comparison:** -->
+<p>In practice, this replaces an O(T) concat + read with O(W) extra work, which is negligible for long contexts (T ≫ W).</p>
+<p><strong>The optimized version:</strong></p>
+<ol type="1">
+<li><p>Creates a tiny 6-token tensor instead of large token tensor</p></li>
+<li><p>Main computation overlaps with communication (free speedup!)</p></li>
+</ol>
+<hr>
+</section>
+</section>
+</section>
+<section id="backward-pass-where-things-get-spicy" class="level1">
+<h1>Backward Pass: Where Things Get Spicy</h1>
+<p>Now comes the fun part. Backward pass has TWO gradients to compute:</p>
+<p><span class="math display">\[
+\begin{aligned}
+\frac{\partial L}{\partial x[t]} &amp;= \sum_{k=0}^{W-1} w[W-1-k] \cdot \frac{\partial L}{\partial y[t+k]} \\
+\frac{\partial L}{\partial w[k]} &amp;= \sum_{b,t} x[b,t] \cdot \frac{\partial L}{\partial y[b, t+(W-1-k)]}
+\end{aligned}
+\]</span></p>
+<p>Notice anything? <strong>Both need FUTURE gradients</strong> (dy[t+k])!</p>
+<p>This is the opposite of forward pass: - <strong>Forward:</strong> Position t needs PAST inputs (x[t-W+1:t+1]) → LEFT halo - <strong>Backward:</strong> Gradient dx[t] needs FUTURE grads (dy[t:t+W]) → RIGHT halo</p>
+<p>Mind = blown 🤯</p>
+<hr>
+<section id="naive-backward-the-padding-dilemma" class="level2">
+<h2 class="anchored" data-anchor-id="naive-backward-the-padding-dilemma">Naive Backward: The Padding Dilemma</h2>
+<p>By looking at the dw formula again, It is clear that for the last W-1 positions in our shard, we need dy from the next rank. But shall we load corresponding x halo too ?</p>
+<p>No, cuz dw depends only on x values of current shard. So, pad the x with zeros instead.</p>
+<p>Here’s the naive approach:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> naive_cp_backward(x_shard, dy_shard, weight, rank, world_size):</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Naive backward: pad x with zeros, extend dy</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="co">    Problem: Creates large tensors just to get boundary corrections</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    B, Ts, D <span class="op">=</span> x_shard.shape</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    W <span class="op">=</span> weight.shape[<span class="dv">1</span>]</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Exchange RIGHT dy-halo (opposite direction from forward!)</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    dy_halo_right <span class="op">=</span> torch.zeros(B, W<span class="op">-</span><span class="dv">1</span>, D, device<span class="op">=</span>dy_shard.device)</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&lt;</span> world_size <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>        recv_req <span class="op">=</span> dist.irecv(dy_halo_right, src<span class="op">=</span>rank<span class="op">+</span><span class="dv">1</span>)</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        send_req <span class="op">=</span> dist.isend(dy_shard[:, :(W<span class="op">-</span><span class="dv">1</span>), :].contiguous(), dst<span class="op">=</span>rank<span class="op">-</span><span class="dv">1</span>)</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Wait for communication (blocking!)</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&lt;</span> world_size <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>        recv_req.wait()</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>        send_req.wait()</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Pad x with zeros (can't get real x from next rank for dw!)</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Extend dy with actual halo</span></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&lt;</span> world_size <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>        x_pad <span class="op">=</span> torch.zeros(B, W<span class="op">-</span><span class="dv">1</span>, D, device<span class="op">=</span>x_shard.device)</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>        x_extended <span class="op">=</span> torch.cat([x_shard, x_pad], dim<span class="op">=</span><span class="dv">1</span>)  <span class="co"># [B, Ts+W-1, D]</span></span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>        dy_extended <span class="op">=</span> torch.cat([dy_shard, dy_halo_right], dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>        x_extended <span class="op">=</span> x_shard</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>        dy_extended <span class="op">=</span> dy_shard</span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Compute backward on extended tensors</span></span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>    <span class="co"># The zero-padded x means those positions contribute 0 to dw (correct!)</span></span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>    dx_extended, dw_local, _, _, _ <span class="op">=</span> causal_conv1d_bwd(</span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>        x<span class="op">=</span>x_extended, </span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>        dy<span class="op">=</span>dy_extended, </span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>        weight<span class="op">=</span>weight</span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Extract valid dx portion</span></span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>    dx_shard <span class="op">=</span> dx_extended[:, :Ts, :]</span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Reduce dw across all ranks</span></span>
+<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a>    dw_global <span class="op">=</span> dw_local.<span class="bu">float</span>()</span>
+<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>    dist.all_reduce(dw_global, op<span class="op">=</span>dist.ReduceOp.SUM)</span>
+<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> dx_shard, dw_global</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>Why zero padding x works:</strong> - We only own x[0:Ts], so we can’t compute dw contributions from x[Ts:Ts+W-1] (those are on the next rank!) - Padding with zeros means those fake positions contribute 0 to dw ✓ - Each rank computes dw only from its owned x values - Global reduction sums all local dw → correct global dw</p>
+<p><strong>Why this is still painful:</strong> Yeah you guessed it. Same problem as our Naive-Forward above – creating large tensors. —</p>
+</section>
+<section id="optimized-backward-add-two-tiny-convolutions" class="level2">
+<h2 class="anchored" data-anchor-id="optimized-backward-add-two-tiny-convolutions">Optimized Backward: Add Two Tiny Convolutions</h2>
+<p>The key insight: <strong>Don’t extend the entire shard. Just fix the boundaries with tiny convolutions!</strong></p>
+<p>Three steps: 1. <strong>Main local convolution</strong> - compute on local shard (wrong at boundaries) 2. <strong>Tiny convolution to correct dx</strong> - fix last W-1 positions of dx 3. <strong>Tiny convolution to correct dw</strong> - add missing boundary contributions</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> optimized_cp_backward(x_shard, dy_shard, weight, rank, world_size):</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Production backward: minimal I/O, overlapped communication</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co">    Three convolutions: 1 big (local) + 2 tiny (boundary corrections)</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    B, Ts, D <span class="op">=</span> x_shard.shape</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    W <span class="op">=</span> weight.shape[<span class="dv">1</span>]</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    halo_shape <span class="op">=</span> (B, W<span class="op">-</span><span class="dv">1</span>, D)</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ==========================================</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="co"># STEP 1: Initiate dy halo exchange</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ==========================================</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    dy_halo_right <span class="op">=</span> torch.zeros(halo_shape, device<span class="op">=</span>dy_shard.device, dtype<span class="op">=</span>dy_shard.dtype)</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    recv_req <span class="op">=</span> send_req <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&lt;</span> world_size <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        recv_req <span class="op">=</span> dist.irecv(dy_halo_right, src<span class="op">=</span>rank<span class="op">+</span><span class="dv">1</span>)</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>        send_req <span class="op">=</span> dist.isend(</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>            dy_shard[:, :(W<span class="op">-</span><span class="dv">1</span>), :].contiguous(), </span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>            dst<span class="op">=</span>rank<span class="op">-</span><span class="dv">1</span></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ==========================================</span></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    <span class="co"># STEP 2: MAIN local backward (OVERLAPPED!)</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ==========================================</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    <span class="co"># This is the BIG convolution on the full shard</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    dx_shard, dw_local, _, _, _ <span class="op">=</span> causal_conv1d_bwd(</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>        x<span class="op">=</span>x_shard,      <span class="co"># [B, Ts, D] - full shard</span></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>        dy<span class="op">=</span>dy_shard,    <span class="co"># [B, Ts, D] - full shard</span></span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>        weight<span class="op">=</span>weight</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Result: </span></span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    <span class="co"># - dx_shard: Last W-1 positions are WRONG (need future dy)</span></span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    <span class="co"># - dw_local: Missing contributions from x[-(W-1):] × dy_halo_right</span></span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ==========================================</span></span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>    <span class="co"># STEP 3: Wait for dy halo</span></span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ==========================================</span></span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> recv_req: recv_req.wait()</span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> send_req: send_req.wait()</span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ==========================================</span></span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>    <span class="co"># STEP 4: TINY convolution to correct dx</span></span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ==========================================</span></span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&lt;</span> world_size <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Create TINY boundary window for dx correction</span></span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a>        x_bndr <span class="op">=</span> torch.cat([</span>
+<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>            x_shard[:, <span class="op">-</span>(W<span class="op">-</span><span class="dv">1</span>):, :],    <span class="co"># Last W-1 of x: [B, 3, D]</span></span>
+<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a>            torch.zeros(halo_shape, device<span class="op">=</span>x_shard.device, dtype<span class="op">=</span>x_shard.dtype)  <span class="co"># Padding: [B, 3, D]</span></span>
+<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a>        ], dim<span class="op">=</span><span class="dv">1</span>)  <span class="co"># Total: [B, 6, D] for W=4</span></span>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a>        dy_bndr <span class="op">=</span> torch.cat([</span>
+<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a>            dy_shard[:, <span class="op">-</span>(W<span class="op">-</span><span class="dv">1</span>):, :],   <span class="co"># Last W-1 of dy: [B, 3, D]</span></span>
+<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>            dy_halo_right              <span class="co"># Actual halo: [B, 3, D]</span></span>
+<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a>        ], dim<span class="op">=</span><span class="dv">1</span>)  <span class="co"># Total: [B, 6, D]</span></span>
+<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Run tiny convolution</span></span>
+<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a>        dx_bndr, dw_bndr, _, _, _ <span class="op">=</span> causal_conv1d_bwd(</span>
+<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a>            x<span class="op">=</span>x_bndr,     <span class="co"># [B, 6, D] - tiny!</span></span>
+<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a>            dy<span class="op">=</span>dy_bndr,   <span class="co"># [B, 6, D] - tiny!</span></span>
+<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a>            weight<span class="op">=</span>weight</span>
+<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb5-67"><a href="#cb5-67" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Replace the incorrect dx boundary with correct values</span></span>
+<span id="cb5-68"><a href="#cb5-68" aria-hidden="true" tabindex="-1"></a>        dx_shard[:, <span class="op">-</span>(W<span class="op">-</span><span class="dv">1</span>):] <span class="op">=</span> dx_bndr[:, :(W<span class="op">-</span><span class="dv">1</span>)]</span>
+<span id="cb5-69"><a href="#cb5-69" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-70"><a href="#cb5-70" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ==========================================</span></span>
+<span id="cb5-71"><a href="#cb5-71" aria-hidden="true" tabindex="-1"></a>    <span class="co"># STEP 5: TINY convolution to correct dw</span></span>
+<span id="cb5-72"><a href="#cb5-72" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ==========================================</span></span>
+<span id="cb5-73"><a href="#cb5-73" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Problem: dw_bndr above includes BOTH:</span></span>
+<span id="cb5-74"><a href="#cb5-74" aria-hidden="true" tabindex="-1"></a>    <span class="co">#   - x[-(W-1):] × dy[-(W-1):] ← already counted in dw_local!</span></span>
+<span id="cb5-75"><a href="#cb5-75" aria-hidden="true" tabindex="-1"></a>    <span class="co">#   - x[-(W-1):] × dy_halo_right ← NEW, need to add this!</span></span>
+<span id="cb5-76"><a href="#cb5-76" aria-hidden="true" tabindex="-1"></a>    <span class="co">#</span></span>
+<span id="cb5-77"><a href="#cb5-77" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Solution: Run another tiny convolution with zero-padded local dy (since they are already covered)</span></span>
+<span id="cb5-78"><a href="#cb5-78" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&lt;</span> world_size <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb5-79"><a href="#cb5-79" aria-hidden="true" tabindex="-1"></a>        dy_bndr_corrected <span class="op">=</span> torch.cat([</span>
+<span id="cb5-80"><a href="#cb5-80" aria-hidden="true" tabindex="-1"></a>            torch.zeros(halo_shape, device<span class="op">=</span>dy_shard.device, dtype<span class="op">=</span>dy_shard.dtype),  <span class="co"># Zero out local</span></span>
+<span id="cb5-81"><a href="#cb5-81" aria-hidden="true" tabindex="-1"></a>            dy_halo_right              <span class="co"># Only keep halo</span></span>
+<span id="cb5-82"><a href="#cb5-82" aria-hidden="true" tabindex="-1"></a>        ], dim<span class="op">=</span><span class="dv">1</span>)  <span class="co"># [B, 6, D]</span></span>
+<span id="cb5-83"><a href="#cb5-83" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb5-84"><a href="#cb5-84" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Run tiny convolution to get ONLY the missing contribution</span></span>
+<span id="cb5-85"><a href="#cb5-85" aria-hidden="true" tabindex="-1"></a>        _, dw_correction, _, _, _ <span class="op">=</span> causal_conv1d_bwd(</span>
+<span id="cb5-86"><a href="#cb5-86" aria-hidden="true" tabindex="-1"></a>            x<span class="op">=</span>x_bndr,              <span class="co"># Same x boundary: [B, 6, D]</span></span>
+<span id="cb5-87"><a href="#cb5-87" aria-hidden="true" tabindex="-1"></a>            dy<span class="op">=</span>dy_bndr_corrected,  <span class="co"># Zero-padded dy: [B, 6, D]</span></span>
+<span id="cb5-88"><a href="#cb5-88" aria-hidden="true" tabindex="-1"></a>            weight<span class="op">=</span>weight</span>
+<span id="cb5-89"><a href="#cb5-89" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb5-90"><a href="#cb5-90" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb5-91"><a href="#cb5-91" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add the missing contribution</span></span>
+<span id="cb5-92"><a href="#cb5-92" aria-hidden="true" tabindex="-1"></a>        dw_local <span class="op">+=</span> dw_correction</span>
+<span id="cb5-93"><a href="#cb5-93" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-94"><a href="#cb5-94" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ==========================================</span></span>
+<span id="cb5-95"><a href="#cb5-95" aria-hidden="true" tabindex="-1"></a>    <span class="co"># STEP 6: Global dw reduction</span></span>
+<span id="cb5-96"><a href="#cb5-96" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ==========================================</span></span>
+<span id="cb5-97"><a href="#cb5-97" aria-hidden="true" tabindex="-1"></a>    dw_global <span class="op">=</span> dw_local.<span class="bu">float</span>()</span>
+<span id="cb5-98"><a href="#cb5-98" aria-hidden="true" tabindex="-1"></a>    dist.all_reduce(dw_global, op<span class="op">=</span>dist.ReduceOp.SUM)</span>
+<span id="cb5-99"><a href="#cb5-99" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-100"><a href="#cb5-100" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> dx_shard, dw_global</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<section id="the-dw-correction-why-zero-padding-works" class="level3">
+<h3 class="anchored" data-anchor-id="the-dw-correction-why-zero-padding-works">The dw Correction: Why Zero Padding Works</h3>
+<p>This is the subtle part. Let’s trace through what happens for W=4:</p>
+<p><strong>What dw_local already computed:</strong></p>
+<pre><code>For each x position, compute x[t] × dy[t+(W-1-k)] for k=0,1,2,3:
+
+x[0] × dy[0:4]         ✓ all local
+x[1] × dy[1:5]         ✓ all local
+...
+x[Ts-3] × dy[Ts-3:Ts+1]   ✓ but dy[Ts] is MISSING (it's on next rank!)
+x[Ts-2] × dy[Ts-2:Ts+2]   ✓ but dy[Ts:Ts+2] is MISSING!
+x[Ts-1] × dy[Ts-1:Ts+3]   ✓ but dy[Ts:Ts+3] is MISSING!</code></pre>
+<p><strong>What’s MISSING from dw_local:</strong></p>
+<pre><code>x[Ts-3] needs: dy[Ts]          (1 position from halo)
+x[Ts-2] needs: dy[Ts:Ts+2]     (2 positions from halo)
+x[Ts-1] needs: dy[Ts:Ts+3]     (3 positions from halo)</code></pre>
+<p><strong>Why we can’t just use dw_bndr directly:</strong></p>
+<p>If we compute backward on <code>x_bndr</code> with full <code>dy_bndr</code>:</p>
+<pre><code>x_bndr = [x[Ts-3], x[Ts-2], x[Ts-1], 0, 0, 0]
+dy_bndr = [dy[Ts-3], dy[Ts-2], dy[Ts-1], dy[Ts], dy[Ts+1], dy[Ts+2]]
+
+dw_bndr includes:
+  x[Ts-3] × dy[Ts-3:Ts+1]  ← LOCAL parts already in dw_local! ❌
+  x[Ts-2] × dy[Ts-2:Ts+2]  ← LOCAL parts already in dw_local! ❌
+  x[Ts-1] × dy[Ts-1:Ts+3]  ← LOCAL parts already in dw_local! ❌</code></pre>
+<p>We’d be <strong>double-counting</strong> all the local interactions!</p>
+<p><strong>Solution: Zero-pad the local dy part</strong></p>
+<pre><code>dy_bndr_corrected = [0, 0, 0, dy[Ts], dy[Ts+1], dy[Ts+2]]
+
+dw_correction = causal_conv1d_bwd(x_bndr, dy_bndr_corrected, ...)
+
+Now computes ONLY:
+  x[Ts-3] × dy[Ts]        ✓ NEW contribution only!
+  x[Ts-2] × dy[Ts:Ts+2]   ✓ NEW contributions only!
+  x[Ts-1] × dy[Ts:Ts+3]   ✓ NEW contributions only!
+
+The zeros prevent recomputing local interactions!</code></pre>
+<p><strong>The key insight:</strong> Zero-padding the left side of dy means the convolution kernel can’t see those local dy values, so it only computes the new halo interactions we need!</p>
+<p>Boom! 💥 We add exactly the missing interactions without double-counting.</p>
+<hr>
+</section>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

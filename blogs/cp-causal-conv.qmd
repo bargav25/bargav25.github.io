@@ -1,0 +1,458 @@
+---
+title: "Making Causal Convolution Fly: A Deep Dive into Context Parallelism"
+author: "Bargav Jagatha"
+date: "2025-12-23"
+format:
+  html:
+    code-fold: false
+    toc: true
+    toc-depth: 3
+    css: blog-style.css
+jupyter: python3
+---
+
+# TL;DR
+
+When you're training long-context models with causal convolutions (think Mamba, DeltaNet), splitting sequences across GPUs sounds simple until you realize: **each position needs context from its neighbors**. The naive solution? Concatenate halos with your shards. The problem? You're creating massive tensors and wasting memory bandwidth. 
+
+In this post, I'll show you how to get Context Parallelism (CP) working with minimal overhead by being clever about boundary corrections. We'll go from naive implementations to optimized versions for both forward and backward passes.
+
+**Spoiler:** The trick is realizing that when your kernel width W=4 and your shard size is 128k+ tokens, you don't need to concat halo with your gigantic shard and process the entire extended shard—just fix the tiny boundary region that actually needs the halo!
+
+---
+
+## Acknowledgments
+
+This work comes from our teamwork at the **GPU MODE IRL Hackathon 2025**, where we implemented context parallelism on Gated DeltaNet (but without short convolutions). Later on, inspired by an idea suggested by Garret Goon about trading off memory bandwidth with tiny convolutions, I wrote this code.
+
+**Hackathon Team:** Garret Goon, Matt Gleeson, Baladhurgesh, Noyonika and Me (Bargav)
+
+---
+
+# The Setup: What's Context Parallelism Anyway?
+
+You've got a sequence of length T=1024 tokens and 4 GPUs. Easy, right? Each GPU gets 256 tokens.
+
+```python
+# Naive sharding (THIS DOESN'T WORK!)
+T = 1024
+world_size = 4
+shard_size = T // world_size  # 256 per GPU
+
+# Rank 0: x[0:256]
+# Rank 1: x[256:512]  
+# Rank 2: x[512:768]
+# Rank 3: x[768:1024]
+```
+
+But wait—causal convolution isn't elementwise! Position `t` needs to see positions `[t-W+1 : t+1]`:
+
+$$
+y[t] = \sum_{k=0}^{W-1} w[k] \cdot x[t-k]
+$$
+
+For W=4, position 256 (first token in Rank 1) needs to see x[253:257], but x[253:256] lives on Rank 0! Bummer !
+
+This is where the **halo exchange** pattern comes in.
+
+---
+
+# Forward Pass: From Naive to Optimized
+
+## Naive Forward: "Just Concatenate what all you need!"
+
+The simplest solution: get the halo from your left neighbor, concatenate it with your shard, run convolution, extract the valid part.
+
+```python
+def naive_cp_forward(x_shard, weight, rank, world_size):
+    """
+    The straightforward approach that actually works...
+    but at what cost?
+    """
+    B, Ts, D = x_shard.shape
+    W = weight.shape[1]
+    
+    # Exchange LEFT x-halo
+    x_halo_left = torch.zeros(B, W-1, D, device=x_shard.device)
+    
+    if rank > 0:
+        # Receive from left neighbor
+        recv_req = dist.irecv(x_halo_left, src=rank-1)
+    
+    if rank < world_size - 1:
+        # Send to right neighbor
+        send_req = dist.isend(
+            x_shard[:, -(W-1):, :].contiguous(), 
+            dst=rank+1
+        )
+    
+    # Wait for communication (blocking!)
+    if rank > 0:
+        recv_req.wait()
+    if rank < world_size - 1:
+        send_req.wait()
+    
+    # Concatenate: [B, W-1+Ts, D] 🚨 LARGE TENSOR CREATED
+    if rank > 0:
+        x_extended = torch.cat([x_halo_left, x_shard], dim=1)
+    else:
+        x_extended = x_shard
+    
+    # Run convolution on extended input
+    out_extended, _ = causal_conv1d_fwd(x_extended, weight)
+    
+    # Extract valid portion (discard halo region)
+    if rank > 0:
+        out_shard = out_extended[:, (W-1):, :]  # [B, Ts, D]
+    else:
+        out_shard = out_extended
+    
+    return out_shard
+```
+
+### The Problem: Memory Bandwidth is Expensive!
+
+Let's do the math:
+- Shard size: `Ts = 256` tokens
+- Halo size: `W-1 = 3` tokens
+- Extended size: `259` tokens
+- **Overhead: Reading and processing 259 instead of 256**
+
+Wait, that doesn't sound bad! But here's the thing, if Ts = 128k
+
+**We're creating a large tensor by concatenating to correct only 3 outputs!** 
+
+---
+
+## Optimized Forward: Boundary Correction FTW
+
+Here's the key insight: **Only the first W-1 outputs are wrong. Let's just fix those!**
+
+```python
+def optimized_cp_forward(x_shard, weight, rank, world_size):
+    """
+    The production version: minimal I/O, overlapped communication
+    
+    Key idea: Don't extend the entire shard. Just fix the boundary!
+    """
+    B, Ts, D = x_shard.shape
+    W = weight.shape[1]
+    halo_shape = (B, W-1, D)
+    
+    x_halo_left = None
+    recv_req = send_req = None
+    
+    # Step 1: Initiate NON-BLOCKING halo exchange
+    if rank > 0:
+        x_halo_left = torch.empty(halo_shape, device=x_shard.device, dtype=x_shard.dtype)
+        recv_req = dist.irecv(x_halo_left, src=rank-1)
+    
+    if rank < world_size - 1:
+        send_req = dist.isend(
+            x_shard[:, -(W-1):, :].contiguous(), 
+            dst=rank+1
+        )
+    
+    # Step 2: Compute local convolution (WHILE COMMUNICATION HAPPENS!)
+    # First W-1 outputs will be wrong, but that's okay - we'll fix them
+    out_shard, _ = causal_conv1d_fwd(x_shard, weight)
+    
+    # Step 3: Wait for halo exchange to complete
+    if recv_req is not None:
+        recv_req.wait()
+    if send_req is not None:
+        send_req.wait()
+    
+    # Step 4: Boundary correction - only fix first W-1 positions
+    if rank > 0 and x_halo_left is not None:
+        # Create a TINY window: [halo | first W-1 of shard]
+        # Shape: [B, 2*(W-1), D] = [B, 6, D] for W=4
+        x_bndr = torch.cat([
+            x_halo_left,              # [B, 3, D]
+            x_shard[:, :(W-1), :]     # [B, 3, D]
+        ], dim=1)
+        
+        # Recompute ONLY the boundary outputs
+        halo_out, _ = causal_conv1d_fwd(x_bndr, weight)
+        
+        # Replace the incorrect outputs with correct ones
+        # We want positions W-1 to 2*(W-1)-1 from halo_out
+        out_shard[:, :(W-1)] = halo_out[:, (W-1):]
+    
+    return out_shard
+```
+
+### Why This is Beautiful
+
+<!-- **Memory I/O Comparison:** -->
+
+In practice, this replaces an O(T) concat + read with O(W) extra work, which is negligible for long contexts (T ≫ W).
+
+**The optimized version:**
+
+1. Creates a tiny 6-token tensor instead of large token tensor
+
+2. Main computation overlaps with communication (free speedup!)
+
+---
+
+# Backward Pass: Where Things Get Spicy
+
+Now comes the fun part. Backward pass has TWO gradients to compute:
+
+$$
+\begin{aligned}
+\frac{\partial L}{\partial x[t]} &= \sum_{k=0}^{W-1} w[W-1-k] \cdot \frac{\partial L}{\partial y[t+k]} \\
+\frac{\partial L}{\partial w[k]} &= \sum_{b,t} x[b,t] \cdot \frac{\partial L}{\partial y[b, t+(W-1-k)]}
+\end{aligned}
+$$
+
+Notice anything? **Both need FUTURE gradients** (dy[t+k])!
+
+This is the opposite of forward pass:
+- **Forward:** Position t needs PAST inputs (x[t-W+1:t+1]) → LEFT halo
+- **Backward:** Gradient dx[t] needs FUTURE grads (dy[t:t+W]) → RIGHT halo
+
+Mind = blown 🤯
+
+---
+
+## Naive Backward: The Padding Dilemma
+
+By looking at the dw formula again, It is clear that for the last W-1 positions in our shard, we need dy from the next rank. But shall we load corresponding x halo too ?
+
+No, cuz dw depends only on x values of current shard. So, pad the x with zeros instead.
+
+Here's the naive approach:
+
+```python
+def naive_cp_backward(x_shard, dy_shard, weight, rank, world_size):
+    """
+    Naive backward: pad x with zeros, extend dy
+    
+    Problem: Creates large tensors just to get boundary corrections
+    """
+    B, Ts, D = x_shard.shape
+    W = weight.shape[1]
+    
+    # Exchange RIGHT dy-halo (opposite direction from forward!)
+    dy_halo_right = torch.zeros(B, W-1, D, device=dy_shard.device)
+    
+    if rank < world_size - 1:
+        recv_req = dist.irecv(dy_halo_right, src=rank+1)
+    if rank > 0:
+        send_req = dist.isend(dy_shard[:, :(W-1), :].contiguous(), dst=rank-1)
+    
+    # Wait for communication (blocking!)
+    if rank < world_size - 1:
+        recv_req.wait()
+    if rank > 0:
+        send_req.wait()
+    
+    # Pad x with zeros (can't get real x from next rank for dw!)
+    # Extend dy with actual halo
+    if rank < world_size - 1:
+        x_pad = torch.zeros(B, W-1, D, device=x_shard.device)
+        x_extended = torch.cat([x_shard, x_pad], dim=1)  # [B, Ts+W-1, D]
+        dy_extended = torch.cat([dy_shard, dy_halo_right], dim=1)
+    else:
+        x_extended = x_shard
+        dy_extended = dy_shard
+    
+    # Compute backward on extended tensors
+    # The zero-padded x means those positions contribute 0 to dw (correct!)
+    dx_extended, dw_local, _, _, _ = causal_conv1d_bwd(
+        x=x_extended, 
+        dy=dy_extended, 
+        weight=weight
+    )
+    
+    # Extract valid dx portion
+    dx_shard = dx_extended[:, :Ts, :]
+    
+    # Reduce dw across all ranks
+    dw_global = dw_local.float()
+    dist.all_reduce(dw_global, op=dist.ReduceOp.SUM)
+    
+    return dx_shard, dw_global
+```
+
+**Why zero padding x works:**
+- We only own x[0:Ts], so we can't compute dw contributions from x[Ts:Ts+W-1] (those are on the next rank!)
+- Padding with zeros means those fake positions contribute 0 to dw ✓
+- Each rank computes dw only from its owned x values
+- Global reduction sums all local dw → correct global dw
+
+**Why this is still painful:**
+Yeah you guessed it. Same problem as our Naive-Forward above -- creating large tensors.
+---
+
+## Optimized Backward: Add Two Tiny Convolutions
+
+The key insight: **Don't extend the entire shard. Just fix the boundaries with tiny convolutions!**
+
+Three steps:
+1. **Main local convolution** - compute on local shard (wrong at boundaries)
+2. **Tiny convolution to correct dx** - fix last W-1 positions of dx
+3. **Tiny convolution to correct dw** - add missing boundary contributions
+
+```python
+def optimized_cp_backward(x_shard, dy_shard, weight, rank, world_size):
+    """
+    Production backward: minimal I/O, overlapped communication
+    
+    Three convolutions: 1 big (local) + 2 tiny (boundary corrections)
+    """
+    B, Ts, D = x_shard.shape
+    W = weight.shape[1]
+    halo_shape = (B, W-1, D)
+    
+    # ==========================================
+    # STEP 1: Initiate dy halo exchange
+    # ==========================================
+    dy_halo_right = torch.zeros(halo_shape, device=dy_shard.device, dtype=dy_shard.dtype)
+    recv_req = send_req = None
+    
+    if rank < world_size - 1:
+        recv_req = dist.irecv(dy_halo_right, src=rank+1)
+    
+    if rank > 0:
+        send_req = dist.isend(
+            dy_shard[:, :(W-1), :].contiguous(), 
+            dst=rank-1
+        )
+    
+    # ==========================================
+    # STEP 2: MAIN local backward (OVERLAPPED!)
+    # ==========================================
+    # This is the BIG convolution on the full shard
+    dx_shard, dw_local, _, _, _ = causal_conv1d_bwd(
+        x=x_shard,      # [B, Ts, D] - full shard
+        dy=dy_shard,    # [B, Ts, D] - full shard
+        weight=weight
+    )
+    # Result: 
+    # - dx_shard: Last W-1 positions are WRONG (need future dy)
+    # - dw_local: Missing contributions from x[-(W-1):] × dy_halo_right
+    
+    # ==========================================
+    # STEP 3: Wait for dy halo
+    # ==========================================
+    if recv_req: recv_req.wait()
+    if send_req: send_req.wait()
+    
+    # ==========================================
+    # STEP 4: TINY convolution to correct dx
+    # ==========================================
+    if rank < world_size - 1:
+        # Create TINY boundary window for dx correction
+        x_bndr = torch.cat([
+            x_shard[:, -(W-1):, :],    # Last W-1 of x: [B, 3, D]
+            torch.zeros(halo_shape, device=x_shard.device, dtype=x_shard.dtype)  # Padding: [B, 3, D]
+        ], dim=1)  # Total: [B, 6, D] for W=4
+        
+        dy_bndr = torch.cat([
+            dy_shard[:, -(W-1):, :],   # Last W-1 of dy: [B, 3, D]
+            dy_halo_right              # Actual halo: [B, 3, D]
+        ], dim=1)  # Total: [B, 6, D]
+        
+        # Run tiny convolution
+        dx_bndr, dw_bndr, _, _, _ = causal_conv1d_bwd(
+            x=x_bndr,     # [B, 6, D] - tiny!
+            dy=dy_bndr,   # [B, 6, D] - tiny!
+            weight=weight
+        )
+        
+        # Replace the incorrect dx boundary with correct values
+        dx_shard[:, -(W-1):] = dx_bndr[:, :(W-1)]
+    
+    # ==========================================
+    # STEP 5: TINY convolution to correct dw
+    # ==========================================
+    # Problem: dw_bndr above includes BOTH:
+    #   - x[-(W-1):] × dy[-(W-1):] ← already counted in dw_local!
+    #   - x[-(W-1):] × dy_halo_right ← NEW, need to add this!
+    #
+    # Solution: Run another tiny convolution with zero-padded local dy (since they are already covered)
+    if rank < world_size - 1:
+        dy_bndr_corrected = torch.cat([
+            torch.zeros(halo_shape, device=dy_shard.device, dtype=dy_shard.dtype),  # Zero out local
+            dy_halo_right              # Only keep halo
+        ], dim=1)  # [B, 6, D]
+        
+        # Run tiny convolution to get ONLY the missing contribution
+        _, dw_correction, _, _, _ = causal_conv1d_bwd(
+            x=x_bndr,              # Same x boundary: [B, 6, D]
+            dy=dy_bndr_corrected,  # Zero-padded dy: [B, 6, D]
+            weight=weight
+        )
+        
+        # Add the missing contribution
+        dw_local += dw_correction
+    
+    # ==========================================
+    # STEP 6: Global dw reduction
+    # ==========================================
+    dw_global = dw_local.float()
+    dist.all_reduce(dw_global, op=dist.ReduceOp.SUM)
+    
+    return dx_shard, dw_global
+```
+
+### The dw Correction: Why Zero Padding Works
+
+This is the subtle part. Let's trace through what happens for W=4:
+
+**What dw_local already computed:**
+```
+For each x position, compute x[t] × dy[t+(W-1-k)] for k=0,1,2,3:
+
+x[0] × dy[0:4]         ✓ all local
+x[1] × dy[1:5]         ✓ all local
+...
+x[Ts-3] × dy[Ts-3:Ts+1]   ✓ but dy[Ts] is MISSING (it's on next rank!)
+x[Ts-2] × dy[Ts-2:Ts+2]   ✓ but dy[Ts:Ts+2] is MISSING!
+x[Ts-1] × dy[Ts-1:Ts+3]   ✓ but dy[Ts:Ts+3] is MISSING!
+```
+
+**What's MISSING from dw_local:**
+```
+x[Ts-3] needs: dy[Ts]          (1 position from halo)
+x[Ts-2] needs: dy[Ts:Ts+2]     (2 positions from halo)
+x[Ts-1] needs: dy[Ts:Ts+3]     (3 positions from halo)
+```
+
+**Why we can't just use dw_bndr directly:**
+
+If we compute backward on `x_bndr` with full `dy_bndr`:
+```
+x_bndr = [x[Ts-3], x[Ts-2], x[Ts-1], 0, 0, 0]
+dy_bndr = [dy[Ts-3], dy[Ts-2], dy[Ts-1], dy[Ts], dy[Ts+1], dy[Ts+2]]
+
+dw_bndr includes:
+  x[Ts-3] × dy[Ts-3:Ts+1]  ← LOCAL parts already in dw_local! ❌
+  x[Ts-2] × dy[Ts-2:Ts+2]  ← LOCAL parts already in dw_local! ❌
+  x[Ts-1] × dy[Ts-1:Ts+3]  ← LOCAL parts already in dw_local! ❌
+```
+
+We'd be **double-counting** all the local interactions!
+
+**Solution: Zero-pad the local dy part**
+```
+dy_bndr_corrected = [0, 0, 0, dy[Ts], dy[Ts+1], dy[Ts+2]]
+
+dw_correction = causal_conv1d_bwd(x_bndr, dy_bndr_corrected, ...)
+
+Now computes ONLY:
+  x[Ts-3] × dy[Ts]        ✓ NEW contribution only!
+  x[Ts-2] × dy[Ts:Ts+2]   ✓ NEW contributions only!
+  x[Ts-1] × dy[Ts:Ts+3]   ✓ NEW contributions only!
+
+The zeros prevent recomputing local interactions!
+```
+
+**The key insight:** Zero-padding the left side of dy means the convolution kernel can't see those local dy values, so it only computes the new halo interactions we need!
+
+Boom! 💥 We add exactly the missing interactions without double-counting.
+
+---
