@@ -1,0 +1,491 @@
+---
+title: "Making Causal Convolution Fly: Context Parallelism for Long Sequences"
+author: "Bargav Jagatha"
+date: "2025-12-23"
+format:
+  html:
+    code-fold: false
+    toc: true
+    toc-depth: 3
+    css: blog-style.css
+jupyter: python3
+---
+
+# TL;DR
+
+If you want to train or run inference on **very long sequences**, you almost certainly need **context parallelism (CP)**.  
+And if your model uses **short causal convolutions** (as in Mamba, DeltaNet, and related linear/SSM-style models), then CP has to work for those too.
+
+At first glance, this sounds easy: exchange halos, concatenate them with your shard, and run the convolution.  
+In practice, this approach creates large temporary tensors, stalls GPUs while waiting for communication, and wastes memory bandwidth — all to fix just a handful of boundary tokens.
+
+This post is about doing better.
+
+We’ll start from the naive CP implementation that *works*, then refine it into an optimized version that:\
+- avoids large concatenations,\
+- overlaps halo exchange with useful compute,\
+- and makes **long-sequence training and prefill feasible**, rather than memory-bound.
+
+The key idea is simple in hindsight:
+
+> When the kernel width is tiny (e.g. `W = 4`) and the shard is huge (128k+ tokens), only a tiny boundary region actually needs the halo.
+
+So let’s only fix that.
+
+---
+
+## Acknowledgments
+
+This work grew out of our collaboration at the **GPU MODE IRL Hackathon 2025**, where we implemented context parallelism for Gated DeltaNet (initially without short convolutions).  
+Later, inspired by an idea suggested by **Garrett Goon** about trading bandwidth-heavy operations for tiny corrective convolutions, I revisited the problem and wrote the implementation described here.
+
+**Hackathon Team:** Garrett Goon, Matt Gleeson, Baladhurgesh, Noyonika, and me (Bargav)
+
+---
+
+# Quick Notation & Context
+
+We focus on **causal 1D convolutions** with very small kernels, used inside long-context sequence models.
+
+The operation is:
+
+$$
+y[t] = \sum_{k=0}^{W-1} w[k] \cdot x[t-k], \quad t = 0 \dots T-1
+$$
+
+with left-padding (i.e. `x[t-k] = 0` for `t-k < 0`).
+
+**Notation used throughout:**\
+- `x` : input sequence, shape `[B, T, D]` (or `[B, T_s, D]` per shard)\
+- `y` : convolution output, same shape as `x`\
+- `w` : convolution kernel, typically depthwise `[D, W]`\
+- `W` : kernel width (small, usually 3–5)\
+- `T_s` : local shard length per GPU\
+- *halo* : the `W-1` tokens borrowed from a neighboring rank
+
+---
+
+## Why short causal convolutions matter
+
+In models like **DeltaNet**, **Gated DeltaNet**, and Mamba-style architectures, the core mechanism is largely **content-based**.  
+The delta rule or SSM update behaves like an associative memory keyed by the current representation, with no built-in notion of distance or local order.
+
+This is powerful for long-range retrieval — but it struggles with:\
+- local shifts and copies,\
+- n-gram patterns,\
+- near-neighbor comparisons,\
+- induction-head-like behavior.
+
+Short causal convolutions fill this gap.
+
+A small convolution (kernel size 3–5), usually applied right after projections, gives each token direct access to a local window of previous tokens.  
+You can think of it as a cheap, fixed-radius attention window that injects **positional and local structure**.
+
+Empirically, this matters a lot. Ablations consistently show that removing the short convolution hurts language modeling and especially **in-context retrieval**, even when everything else stays the same.
+
+If we want to scale these models to very long sequences, the short convolution isn’t optional — and that means **context parallelism must support it properly**.
+
+---
+
+# Context Parallelism: Where Things Break
+
+For long sequences, we split the sequence dimension across GPUs.
+
+Example: `T = 1024`, `world_size = 4` → each GPU gets 256 tokens.
+
+```python
+# Naive sharding
+# Rank 0: x[0:256]
+# Rank 1: x[256:512]
+# Rank 2: x[512:768]
+# Rank 3: x[768:1024]
+```
+
+This works for elementwise ops — but not for causal convolution.
+
+For `W = 4`, the first token on rank 1 depends on `x[253:256]`, which lives on rank 0.  
+This dependency is handled via **halo exchange**.
+
+The simplest solution is also the most tempting: exchange halos, concatenate them to the shard, and run the convolution on the extended tensor.
+
+It works — but it scales poorly.
+
+---
+
+# Forward Pass
+
+## Naive CP Forward
+
+```python
+def naive_cp_forward(x_shard, weight, rank, world_size):
+    B, Ts, D = x_shard.shape
+    W = weight.shape[1]
+
+    x_halo_left = torch.zeros(B, W-1, D, device=x_shard.device)
+
+    if rank > 0:
+        recv_req = dist.irecv(x_halo_left, src=rank-1)
+    if rank < world_size - 1:
+        send_req = dist.isend(x_shard[:, -(W-1):, :], dst=rank+1)
+
+    if rank > 0: recv_req.wait()
+    if rank < world_size - 1: send_req.wait()
+
+    if rank > 0:
+        x_ext = torch.cat([x_halo_left, x_shard], dim=1)
+    else:
+        x_ext = x_shard
+
+    y_ext, _ = causal_conv1d_fwd(x_ext, weight)
+    return y_ext[:, (W-1):] if rank > 0 else y_ext
+```
+
+This creates large temporary tensors and blocks on communication.  
+For long shards (`T_s >> W`), we’re paying an **O(T_s)** cost to fix **O(W)** outputs.
+
+---
+
+## Optimized CP Forward: Boundary Correction
+
+Here’s the key observation:
+
+> Only the first `W-1` outputs of each shard are wrong.
+
+So instead of extending the entire shard, we:\
+1. overlap halo exchange with the local convolution,\
+2. recompute only a tiny boundary window,\
+3. patch the incorrect outputs.
+
+```python
+def optimized_cp_forward(x_shard, weight, rank, world_size):
+    B, Ts, D = x_shard.shape
+    W = weight.shape[1]
+    halo_shape = (B, W-1, D)
+
+    if rank > 0:
+        halo = torch.empty(halo_shape, device=x_shard.device)
+        recv_req = dist.irecv(halo, src=rank-1)
+    if rank < world_size - 1:
+        send_req = dist.isend(x_shard[:, -(W-1):, :], dst=rank+1)
+
+    y, _ = causal_conv1d_fwd(x_shard, weight)
+
+    if rank > 0:
+        recv_req.wait()
+        x_bndr = torch.cat([halo, x_shard[:, :W-1]], dim=1)
+        y_bndr, _ = causal_conv1d_fwd(x_bndr, weight)
+        y[:, :W-1] = y_bndr[:, W-1:]
+
+    return y
+```
+
+This replaces an `O(T_s)` concat with an `O(W)` correction.
+
+---
+
+
+# Backward pass: the full story (dx, dw, db) + why the halo direction flips
+
+Backward has two core gradients we care about:
+
+- \(dx\): depends on **future** \(dy\) (because forward was causal / used past \(x\))
+- \(dw\): depends on cross-correlation of \(x\) with \(dy\), and at the right boundary it also needs **future** \(dy\)
+
+You can see it in these formulas:
+
+$$
+\frac{\partial L}{\partial x[t]} = \sum_{k=0}^{W-1} w[k]\; \frac{\partial L}{\partial y[t+k]}
+\quad\Rightarrow\quad dx[t] \text{ needs } dy[t:t+W)
+$$
+
+$$
+\frac{\partial L}{\partial w[k]} = \sum_{b,t} x[b,t]\; \frac{\partial L}{\partial y[b, t+(W-1-k)]}
+\quad\Rightarrow\quad dw \text{ needs future } dy \text{ near right boundary}
+$$
+
+So the halo flips:
+- forward: **left halo of x**
+- backward: **right halo of dy**
+
+---
+
+## The “naive but correct” backward (and why x gets zero-padded)
+
+At the **right boundary** of a shard, computing dx and dw needs dy from the next rank.  
+But for dw, you *do not* need x from the next rank because that would correspond to x tokens that you don’t own in this shard.
+
+So the standard trick:
+- extend dy with a real halo from the right neighbor
+- extend x with zeros (so “fake” x positions contribute nothing to dw)
+
+
+```python
+def naive_cp_backward(x_shard, dy_shard, weight, rank, world_size):
+    """
+    Naive backward: pad x with zeros, extend dy
+    
+    Problem: Creates large tensors just to get boundary corrections
+    """
+    B, Ts, D = x_shard.shape
+    W = weight.shape[1]
+    
+    # Exchange RIGHT dy-halo (opposite direction from forward!)
+    dy_halo_right = torch.zeros(B, W-1, D, device=dy_shard.device)
+    
+    if rank < world_size - 1:
+        recv_req = dist.irecv(dy_halo_right, src=rank+1)
+    if rank > 0:
+        send_req = dist.isend(dy_shard[:, :(W-1), :].contiguous(), dst=rank-1)
+    
+    # Wait for communication (blocking!)
+    if rank < world_size - 1:
+        recv_req.wait()
+    if rank > 0:
+        send_req.wait()
+    
+    # Pad x with zeros (can't get real x from next rank for dw!)
+    # Extend dy with actual halo
+    if rank < world_size - 1:
+        x_pad = torch.zeros(B, W-1, D, device=x_shard.device)
+        x_extended = torch.cat([x_shard, x_pad], dim=1)  # [B, Ts+W-1, D]
+        dy_extended = torch.cat([dy_shard, dy_halo_right], dim=1)
+    else:
+        x_extended = x_shard
+        dy_extended = dy_shard
+    
+    # Compute backward on extended tensors
+    # The zero-padded x means those positions contribute 0 to dw (correct!)
+    dx_extended, dw_local, _, _, _ = causal_conv1d_bwd(
+        x=x_extended, 
+        dy=dy_extended, 
+        weight=weight
+    )
+    
+    # Extract valid dx portion
+    dx_shard = dx_extended[:, :Ts, :]
+    
+    # Reduce dw across all ranks
+    dw_global = dw_local.float()
+    dist.all_reduce(dw_global, op=dist.ReduceOp.SUM)
+    
+    return dx_shard, dw_global
+```
+
+
+This is correct because:\
+- dw is a sum over positions that exist in the true sequence\
+- positions beyond your shard belong to another GPU, so you shouldn’t include their x anyway
+
+
+---
+
+## Optimized backward: do the big local backward first, then patch boundaries with tiny backwards
+
+We want the same pattern as forward:\
+- begin non-blocking comms,\
+- run the big local kernel,\
+- when halo arrives, fix only what was missing.
+
+We need to fix **two things**:\
+1. last `W-1` positions of `dx`\
+2. missing right-boundary contributions to `dw` (and `db` if bias exists)
+
+### Step-by-step plan
+
+1. Start exchanging the **right halo of dy**:
+   - receive `dy_halo_right` from `rank+1`
+   - send `dy[:, :W-1]` to `rank-1` (because they need it as their right halo)
+
+2. Run `causal_conv1d_bwd(x_shard, dy_shard)` locally:
+   - produces `dx_local`, `dw_local`, `db_local`
+   - but `dx_local[:, -(W-1):]` is wrong (missing future dy)
+   - and `dw_local` is missing terms involving `dy_halo_right`
+
+3. When halo arrives, do **tiny backward** on a 2*(W-1) window to fix dx boundary
+
+4. For dw, avoid double-counting:
+   - the tiny backward with `dy_bndr = [dy_tail, dy_halo]` contains both:
+     - local interactions (already counted in `dw_local`)
+     - halo interactions (missing)
+   - run a second tiny backward with `dy_bndr = [0, dy_halo]` to extract only the missing part
+
+5. All-reduce `dw` and `db` across ranks.
+
+### Full optimized backward code (matching the logic above)
+
+```python
+def optimized_cp_backward(x_shard, dy_shard, weight, bias, rank, world_size, activation=None):
+    B, Ts, D = x_shard.shape
+    W = weight.shape[1]
+    halo_shape = (B, W-1, D)
+
+    # ------------------------------------------------------------
+    # 1) Exchange right halo of dy (opposite direction from forward)
+    # ------------------------------------------------------------
+    dy_halo_right = torch.zeros(halo_shape, device=dy_shard.device, dtype=dy_shard.dtype)
+    recv_req = send_req = None
+
+    if rank < world_size - 1:
+        recv_req = dist.irecv(dy_halo_right, src=rank+1)
+    if rank > 0:
+        send_req = dist.isend(dy_shard[:, :W-1, :].contiguous(), dst=rank-1)
+
+    # ------------------------------------------------------------
+    # 2) Big local backward on the shard (overlaps with comms)
+    # ------------------------------------------------------------
+    dx, dw, db, _, _ = causal_conv1d_bwd(
+        x=x_shard,
+        dy=dy_shard,
+        dht=None,
+        weight=weight,
+        bias=bias,
+        residual=None,
+        initial_state=None,
+        activation=activation,
+        cu_seqlens=None,
+    )
+
+    if recv_req is not None: recv_req.wait()
+    if send_req is not None: send_req.wait()
+
+    # If last rank, no right halo exists → local backward is already correct at the right boundary.
+    if rank < world_size - 1:
+        # ------------------------------------------------------------
+        # 3) dx boundary fix via tiny backward on [x_tail | 0] and [dy_tail | dy_halo]
+        # ------------------------------------------------------------
+        x_pad = torch.zeros(halo_shape, device=x_shard.device, dtype=x_shard.dtype)
+        x_bndr = torch.cat([x_shard[:, -(W-1):, :], x_pad], dim=1)            # [B, 2*(W-1), D]
+        dy_bndr = torch.cat([dy_shard[:, -(W-1):, :], dy_halo_right], dim=1)  # [B, 2*(W-1), D]
+
+        dx_bndr, dw_bndr, _, _, _ = causal_conv1d_bwd(
+            x=x_bndr,
+            dy=dy_bndr,
+            dht=None,
+            weight=weight,
+            bias=bias,
+            residual=None,
+            initial_state=None,
+            activation=activation,
+            cu_seqlens=None,
+        )
+
+        # dx correction: first (W-1) entries of dx_bndr correspond to x_tail
+        dx[:, -(W-1):, :] = dx_bndr[:, :W-1, :]
+
+        # ------------------------------------------------------------
+        # 4) dw/db boundary correction (avoid double-counting local dy)
+        # ------------------------------------------------------------
+        # dw_bndr includes:
+        #   (A) x_tail × dy_tail    <-- already included in dw from the big local backward
+        #   (B) x_tail × dy_halo    <-- missing; we want ONLY this
+        #
+        # So do another tiny backward with dy_tail zeroed out:
+        dy_zero_local = torch.zeros(halo_shape, device=dy_shard.device, dtype=dy_shard.dtype)
+        dy_bndr_only_halo = torch.cat([dy_zero_local, dy_halo_right], dim=1)
+
+        _, dw_crt, _, _, _ = causal_conv1d_bwd(
+            x=x_bndr,
+            dy=dy_bndr_only_halo,
+            dht=None,
+            weight=weight,
+            bias=bias,
+            residual=None,
+            initial_state=None,
+            activation=activation,
+            cu_seqlens=None,
+        )
+
+        # dw correction
+        dw += dw_crt
+
+
+    # ------------------------------------------------------------
+    # 5) Reduce weight/bias grads across ranks (global parameter grads)
+    # ------------------------------------------------------------
+    dist.all_reduce(dw, op=dist.ReduceOp.SUM)
+    if db is not None:
+        dist.all_reduce(db, op=dist.ReduceOp.SUM)
+
+    return dx, dw, db
+```
+
+---
+
+## The dw correction: why the second tiny backward is necessary
+
+This is the part that tends to confuse people (it confused me too the first time).
+
+
+**What local dw already computed:**
+```
+For each x position, compute x[t] × dy[t+(W-1-k)] for k=0,1,2,3:
+
+x[0] × dy[0:4]         ✓ all local
+x[1] × dy[1:5]         ✓ all local
+...
+x[Ts-3] × dy[Ts-3:Ts+1]   ✓ but dy[Ts] is MISSING (it's on next rank!)
+x[Ts-2] × dy[Ts-2:Ts+2]   ✓ but dy[Ts:Ts+2] is MISSING!
+x[Ts-1] × dy[Ts-1:Ts+3]   ✓ but dy[Ts:Ts+3] is MISSING!
+```
+
+**What's MISSING from local dw:**
+```
+x[Ts-3] needs: dy[Ts]          (1 position from halo)
+x[Ts-2] needs: dy[Ts:Ts+2]     (2 positions from halo)
+x[Ts-1] needs: dy[Ts:Ts+3]     (3 positions from halo)
+```
+
+**Why we can't just use dw_bndr directly:**
+
+If we compute backward on `x_bndr` with full `dy_bndr`:
+```
+x_bndr = [x[Ts-3], x[Ts-2], x[Ts-1], 0, 0, 0]
+dy_bndr = [dy[Ts-3], dy[Ts-2], dy[Ts-1], dy[Ts], dy[Ts+1], dy[Ts+2]]
+
+dw_bndr includes:
+  x[Ts-3] × dy[Ts-3:Ts+1]  ← LOCAL parts already in dw_local! ❌
+  x[Ts-2] × dy[Ts-2:Ts+2]  ← LOCAL parts already in dw_local! ❌
+  x[Ts-1] × dy[Ts-1:Ts+3]  ← LOCAL parts already in dw_local! ❌
+```
+
+We'd be **double-counting** all the local interactions!
+
+**Solution: Zero-pad the local dy part**
+```
+dy_bndr_only_halo = [0, 0, 0, dy[Ts], dy[Ts+1], dy[Ts+2]]
+
+dw_correction = causal_conv1d_bwd(x_bndr, dy_bndr_only_halo, ...)
+
+Now computes ONLY:
+  x[Ts-3] × dy[Ts]        ✓ NEW contribution only!
+  x[Ts-2] × dy[Ts:Ts+2]   ✓ NEW contributions only!
+  x[Ts-1] × dy[Ts:Ts+3]   ✓ NEW contributions only!
+
+The zeros prevent recomputing local interactions!
+```
+
+# Wrap-up
+
+If you’re doing context parallelism for long sequences, you’ll eventually hit ops that aren’t elementwise. Short causal convs are one of them, and they show up in exactly the class of models that make CP attractive in the first place.
+
+The big idea I keep coming back to:\
+- **don’t extend huge shards to fix tiny boundaries**\
+- **start comms early, compute locally while comms happen, then patch boundary regions**
+
+Same math, much cleaner system behavior.
+
+If you try this and your `dx` or `dw` correctness fails, the first thing I’d check is whether your boundary tiny backwards are:\
+- using the right halo direction (`dy` from the *right*),\
+- patching the correct slices of `dx`,\
+- and avoiding `dw` double-counting via the “zero local dy” correction pass.
+---
+
+# References
+
+1. Yang, Songlin, et al. "Parallelizing linear transformers with the delta rule over sequence length." *Advances in Neural Information Processing Systems* 37 (2024): 115491-115522.
+
+2. Yang, Songlin, Jan Kautz, and Ali Hatamizadeh. "Gated delta networks: Improving mamba2 with delta rule." *arXiv preprint arXiv:2412.06464* (2024).
+
+3. Gu, Albert, and Tri Dao. "Mamba: Linear-time sequence modeling with selective state spaces." *First Conference on Language Modeling*. 2024.
+
+4. Liu, Hao, Matei Zaharia, and Pieter Abbeel. "Ring attention with blockwise transformers for near-infinite context." *arXiv preprint arXiv:2310.01889* (2023).
