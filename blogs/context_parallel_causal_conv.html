@@ -131,14 +131,17 @@ window.Quarto = {
   <li><a href="#backward-pass-the-full-story-dx-dw-db-why-the-halo-direction-flips" id="toc-backward-pass-the-full-story-dx-dw-db-why-the-halo-direction-flips" class="nav-link" data-scroll-target="#backward-pass-the-full-story-dx-dw-db-why-the-halo-direction-flips">Backward pass: the full story (dx, dw, db) + why the halo direction flips</a>
   <ul class="collapse">
   <li><a href="#the-naive-but-correct-backward-and-why-x-gets-zero-padded" id="toc-the-naive-but-correct-backward-and-why-x-gets-zero-padded" class="nav-link" data-scroll-target="#the-naive-but-correct-backward-and-why-x-gets-zero-padded">The “naive but correct” backward (and why x gets zero-padded)</a></li>
-  <li><a href="#optimized-backward-do-the-big-local-backward-first-then-patch-boundaries-with-tiny-backwards" id="toc-optimized-backward-do-the-big-local-backward-first-then-patch-boundaries-with-tiny-backwards" class="nav-link" data-scroll-target="#optimized-backward-do-the-big-local-backward-first-then-patch-boundaries-with-tiny-backwards">Optimized backward: do the big local backward first, then patch boundaries with tiny backwards</a>
+  <li><a href="#optimized-backward-do-the-big-local-backward-first-then-patch-boundaries-with-one-tiny-backward" id="toc-optimized-backward-do-the-big-local-backward-first-then-patch-boundaries-with-one-tiny-backward" class="nav-link" data-scroll-target="#optimized-backward-do-the-big-local-backward-first-then-patch-boundaries-with-one-tiny-backward">Optimized backward: do the big local backward first, then patch boundaries with one tiny backward</a>
   <ul class="collapse">
   <li><a href="#step-by-step-plan" id="toc-step-by-step-plan" class="nav-link" data-scroll-target="#step-by-step-plan">Step-by-step plan</a></li>
   <li><a href="#full-optimized-backward-code-matching-the-logic-above" id="toc-full-optimized-backward-code-matching-the-logic-above" class="nav-link" data-scroll-target="#full-optimized-backward-code-matching-the-logic-above">Full optimized backward code (matching the logic above)</a></li>
   </ul></li>
-  <li><a href="#the-dw-correction-why-the-second-tiny-backward-is-necessary" id="toc-the-dw-correction-why-the-second-tiny-backward-is-necessary" class="nav-link" data-scroll-target="#the-dw-correction-why-the-second-tiny-backward-is-necessary">The dw correction: why the second tiny backward is necessary</a></li>
+  <li><a href="#one-boundary-backward-for-both-dx-and-dw" id="toc-one-boundary-backward-for-both-dx-and-dw" class="nav-link" data-scroll-target="#one-boundary-backward-for-both-dx-and-dw">One boundary backward for both dx and dw</a></li>
   </ul></li>
-  <li><a href="#wrap-up" id="toc-wrap-up" class="nav-link" data-scroll-target="#wrap-up">Wrap-up</a></li>
+  <li><a href="#wrap-up" id="toc-wrap-up" class="nav-link" data-scroll-target="#wrap-up">Wrap-up</a>
+  <ul class="collapse">
+  <li><a href="#also-worth-noting-this-implementation-does-not-yet-handle-cu_seqlens-variable-length-packed-sequences.-that-case-needs-more-thought-around-how-boundaries-and-halos-interact-with-sequence-boundaries-inside-a-packed-batch." id="toc-also-worth-noting-this-implementation-does-not-yet-handle-cu_seqlens-variable-length-packed-sequences.-that-case-needs-more-thought-around-how-boundaries-and-halos-interact-with-sequence-boundaries-inside-a-packed-batch." class="nav-link" data-scroll-target="#also-worth-noting-this-implementation-does-not-yet-handle-cu_seqlens-variable-length-packed-sequences.-that-case-needs-more-thought-around-how-boundaries-and-halos-interact-with-sequence-boundaries-inside-a-packed-batch.">Also worth noting: this implementation does not yet handle <code>cu_seqlens</code> (variable-length packed sequences). That case needs more thought around how boundaries and halos interact with sequence boundaries inside a packed batch.</a></li>
+  </ul></li>
   <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
   </ul>
 </nav>
@@ -390,8 +393,8 @@ But for dw, you <em>do not</em> need x from the next rank because that would cor
 - positions beyond your shard belong to another GPU, so you shouldn’t include their x anyway</p>
 <hr>
 </section>
-<section id="optimized-backward-do-the-big-local-backward-first-then-patch-boundaries-with-tiny-backwards" class="level2">
-<h2 class="anchored" data-anchor-id="optimized-backward-do-the-big-local-backward-first-then-patch-boundaries-with-tiny-backwards">Optimized backward: do the big local backward first, then patch boundaries with tiny backwards</h2>
+<section id="optimized-backward-do-the-big-local-backward-first-then-patch-boundaries-with-one-tiny-backward" class="level2">
+<h2 class="anchored" data-anchor-id="optimized-backward-do-the-big-local-backward-first-then-patch-boundaries-with-one-tiny-backward">Optimized backward: do the big local backward first, then patch boundaries with one tiny backward</h2>
 <p>We want the same pattern as forward:<br>
 - begin non-blocking comms,<br>
 - run the big local kernel,<br>
@@ -402,28 +405,25 @@ But for dw, you <em>do not</em> need x from the next rank because that would cor
 <section id="step-by-step-plan" class="level3">
 <h3 class="anchored" data-anchor-id="step-by-step-plan">Step-by-step plan</h3>
 <ol type="1">
-<li><p>Start exchanging the <strong>right halo of dy</strong>:</p>
+<li>Start exchanging the <strong>right halo of dy</strong>:
 <ul>
 <li>receive <code>dy_halo_right</code> from <code>rank+1</code></li>
 <li>send <code>dy[:, :W-1]</code> to <code>rank-1</code> (because they need it as their right halo)</li>
 </ul></li>
-<li><p>Run <code>causal_conv1d_bwd(x_shard, dy_shard)</code> locally:</p>
+<li>Run <code>causal_conv1d_bwd(x_shard, dy_shard)</code> locally:
 <ul>
 <li>produces <code>dx_local</code>, <code>dw_local</code>, <code>db_local</code></li>
 <li>but <code>dx_local[:, -(W-1):]</code> is wrong (missing future dy)</li>
 <li>and <code>dw_local</code> is missing terms involving <code>dy_halo_right</code></li>
 </ul></li>
-<li><p>When halo arrives, do <strong>tiny backward</strong> on a 2*(W-1) window to fix dx boundary</p></li>
-<li><p>For dw, avoid double-counting:</p>
+<li>When halo arrives, do <strong>one tiny backward</strong> on a 2*(W-1) window:
 <ul>
-<li>the tiny backward with <code>dy_bndr = [dy_tail, dy_halo]</code> contains both:
-<ul>
-<li>local interactions (already counted in <code>dw_local</code>)</li>
-<li>halo interactions (missing)</li>
+<li><code>x_bndr = [x_tail, x_zeros]</code> — real x at the right boundary, zeros beyond</li>
+<li><code>dy_bndr = [dy_zeros, dy_halo_right]</code> — zeros for the local part, real halo dy</li>
+<li><code>dx_crt[:, :W-1]</code> fixes <code>dx</code> at the right boundary</li>
+<li><code>dw_crt</code> adds exactly the missing halo contributions to <code>dw</code> — no double-counting, because the local dy was zeroed from the start</li>
 </ul></li>
-<li>run a second tiny backward with <code>dy_bndr = [0, dy_halo]</code> to extract only the missing part</li>
-</ul></li>
-<li><p>All-reduce <code>dw</code> and <code>db</code> across ranks.</p></li>
+<li>All-reduce <code>dw</code> and <code>db</code> across ranks.</li>
 </ol>
 </section>
 <section id="full-optimized-backward-code-matching-the-logic-above" class="level3">
@@ -465,102 +465,77 @@ But for dw, you <em>do not</em> need x from the next rank because that would cor
 <span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>    <span class="co"># If last rank, no right halo exists → local backward is already correct at the right boundary.</span></span>
 <span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rank <span class="op">&lt;</span> world_size <span class="op">-</span> <span class="dv">1</span>:</span>
 <span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>        <span class="co"># ------------------------------------------------------------</span></span>
-<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 3) dx boundary fix via tiny backward on [x_tail | 0] and [dy_tail | dy_halo]</span></span>
-<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>        <span class="co"># ------------------------------------------------------------</span></span>
-<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>        x_pad <span class="op">=</span> torch.zeros(halo_shape, device<span class="op">=</span>x_shard.device, dtype<span class="op">=</span>x_shard.dtype)</span>
-<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>        x_bndr <span class="op">=</span> torch.cat([x_shard[:, <span class="op">-</span>(W<span class="op">-</span><span class="dv">1</span>):, :], x_pad], dim<span class="op">=</span><span class="dv">1</span>)            <span class="co"># [B, 2*(W-1), D]</span></span>
-<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>        dy_bndr <span class="op">=</span> torch.cat([dy_shard[:, <span class="op">-</span>(W<span class="op">-</span><span class="dv">1</span>):, :], dy_halo_right], dim<span class="op">=</span><span class="dv">1</span>)  <span class="co"># [B, 2*(W-1), D]</span></span>
-<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>        dx_bndr, dw_bndr, _, _, _ <span class="op">=</span> causal_conv1d_bwd(</span>
-<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>            x<span class="op">=</span>x_bndr,</span>
-<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>            dy<span class="op">=</span>dy_bndr,</span>
-<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>            dht<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>            weight<span class="op">=</span>weight,</span>
-<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a>            bias<span class="op">=</span>bias,</span>
-<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a>            residual<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>            initial_state<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a>            activation<span class="op">=</span>activation,</span>
-<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a>            cu_seqlens<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a>        <span class="co"># dx correction: first (W-1) entries of dx_bndr correspond to x_tail</span></span>
-<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>        dx[:, <span class="op">-</span>(W<span class="op">-</span><span class="dv">1</span>):, :] <span class="op">=</span> dx_bndr[:, :W<span class="op">-</span><span class="dv">1</span>, :]</span>
-<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a>        <span class="co"># ------------------------------------------------------------</span></span>
-<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 4) dw/db boundary correction (avoid double-counting local dy)</span></span>
-<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a>        <span class="co"># ------------------------------------------------------------</span></span>
-<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a>        <span class="co"># dw_bndr includes:</span></span>
-<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a>        <span class="co">#   (A) x_tail × dy_tail    &lt;-- already included in dw from the big local backward</span></span>
-<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a>        <span class="co">#   (B) x_tail × dy_halo    &lt;-- missing; we want ONLY this</span></span>
-<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a>        <span class="co">#</span></span>
-<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a>        <span class="co"># So do another tiny backward with dy_tail zeroed out:</span></span>
-<span id="cb5-67"><a href="#cb5-67" aria-hidden="true" tabindex="-1"></a>        dy_zero_local <span class="op">=</span> torch.zeros(halo_shape, device<span class="op">=</span>dy_shard.device, dtype<span class="op">=</span>dy_shard.dtype)</span>
-<span id="cb5-68"><a href="#cb5-68" aria-hidden="true" tabindex="-1"></a>        dy_bndr_only_halo <span class="op">=</span> torch.cat([dy_zero_local, dy_halo_right], dim<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb5-69"><a href="#cb5-69" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-70"><a href="#cb5-70" aria-hidden="true" tabindex="-1"></a>        _, dw_crt, _, _, _ <span class="op">=</span> causal_conv1d_bwd(</span>
-<span id="cb5-71"><a href="#cb5-71" aria-hidden="true" tabindex="-1"></a>            x<span class="op">=</span>x_bndr,</span>
-<span id="cb5-72"><a href="#cb5-72" aria-hidden="true" tabindex="-1"></a>            dy<span class="op">=</span>dy_bndr_only_halo,</span>
-<span id="cb5-73"><a href="#cb5-73" aria-hidden="true" tabindex="-1"></a>            dht<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb5-74"><a href="#cb5-74" aria-hidden="true" tabindex="-1"></a>            weight<span class="op">=</span>weight,</span>
-<span id="cb5-75"><a href="#cb5-75" aria-hidden="true" tabindex="-1"></a>            bias<span class="op">=</span>bias,</span>
-<span id="cb5-76"><a href="#cb5-76" aria-hidden="true" tabindex="-1"></a>            residual<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb5-77"><a href="#cb5-77" aria-hidden="true" tabindex="-1"></a>            initial_state<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb5-78"><a href="#cb5-78" aria-hidden="true" tabindex="-1"></a>            activation<span class="op">=</span>activation,</span>
-<span id="cb5-79"><a href="#cb5-79" aria-hidden="true" tabindex="-1"></a>            cu_seqlens<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb5-80"><a href="#cb5-80" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb5-81"><a href="#cb5-81" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-82"><a href="#cb5-82" aria-hidden="true" tabindex="-1"></a>        <span class="co"># dw correction</span></span>
-<span id="cb5-83"><a href="#cb5-83" aria-hidden="true" tabindex="-1"></a>        dw <span class="op">+=</span> dw_crt</span>
-<span id="cb5-84"><a href="#cb5-84" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-85"><a href="#cb5-85" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-86"><a href="#cb5-86" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ------------------------------------------------------------</span></span>
-<span id="cb5-87"><a href="#cb5-87" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 5) Reduce weight/bias grads across ranks (global parameter grads)</span></span>
-<span id="cb5-88"><a href="#cb5-88" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ------------------------------------------------------------</span></span>
-<span id="cb5-89"><a href="#cb5-89" aria-hidden="true" tabindex="-1"></a>    dist.all_reduce(dw, op<span class="op">=</span>dist.ReduceOp.SUM)</span>
-<span id="cb5-90"><a href="#cb5-90" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> db <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
-<span id="cb5-91"><a href="#cb5-91" aria-hidden="true" tabindex="-1"></a>        dist.all_reduce(db, op<span class="op">=</span>dist.ReduceOp.SUM)</span>
-<span id="cb5-92"><a href="#cb5-92" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-93"><a href="#cb5-93" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> dx, dw, db</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 3) One tiny backward fixes both dx and dw simultaneously</span></span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>        <span class="co">#</span></span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>        <span class="co"># x_bndr  = [x_tail | x_zeros]       — real x at boundary, zeros beyond</span></span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>        <span class="co"># dy_bndr = [dy_zeros | dy_halo_right] — zeros for local part, real halo dy</span></span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>        <span class="co">#</span></span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Zeroing the local dy part means:</span></span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>        <span class="co">#   - dw_crt captures ONLY the missing halo contributions (no double-counting)</span></span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>        <span class="co">#   - dx_crt[:, :W-1] gives the corrected dx for the right boundary of the shard</span></span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>        <span class="co"># ------------------------------------------------------------</span></span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>        x_pad   <span class="op">=</span> torch.zeros(halo_shape, device<span class="op">=</span>x_shard.device,  dtype<span class="op">=</span>x_shard.dtype)</span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>        dy_pad  <span class="op">=</span> torch.zeros(halo_shape, device<span class="op">=</span>dy_shard.device, dtype<span class="op">=</span>dy_shard.dtype)</span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a>        x_bndr  <span class="op">=</span> torch.cat([x_shard[:, <span class="op">-</span>(W<span class="op">-</span><span class="dv">1</span>):, :], x_pad],        dim<span class="op">=</span><span class="dv">1</span>)  <span class="co"># [B, 2*(W-1), D]</span></span>
+<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>        dy_bndr <span class="op">=</span> torch.cat([dy_pad,                 dy_halo_right], dim<span class="op">=</span><span class="dv">1</span>)  <span class="co"># [B, 2*(W-1), D]</span></span>
+<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a>        dx_crt, dw_crt, _, _, _ <span class="op">=</span> causal_conv1d_bwd(</span>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a>            x<span class="op">=</span>x_bndr,</span>
+<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a>            dy<span class="op">=</span>dy_bndr,</span>
+<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a>            dht<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>            weight<span class="op">=</span>weight,</span>
+<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a>            bias<span class="op">=</span>bias,</span>
+<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a>            residual<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a>            initial_state<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a>            activation<span class="op">=</span>activation,</span>
+<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a>            cu_seqlens<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a>        dx[:, <span class="op">-</span>(W<span class="op">-</span><span class="dv">1</span>):, :].add_(dx_crt[:, :W<span class="op">-</span><span class="dv">1</span>, :])</span>
+<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a>        dw <span class="op">+=</span> dw_crt</span>
+<span id="cb5-67"><a href="#cb5-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-68"><a href="#cb5-68" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ------------------------------------------------------------</span></span>
+<span id="cb5-69"><a href="#cb5-69" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 4) Reduce weight/bias grads across ranks (global parameter grads)</span></span>
+<span id="cb5-70"><a href="#cb5-70" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ------------------------------------------------------------</span></span>
+<span id="cb5-71"><a href="#cb5-71" aria-hidden="true" tabindex="-1"></a>    dist.all_reduce(dw, op<span class="op">=</span>dist.ReduceOp.SUM)</span>
+<span id="cb5-72"><a href="#cb5-72" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> db <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb5-73"><a href="#cb5-73" aria-hidden="true" tabindex="-1"></a>        dist.all_reduce(db, op<span class="op">=</span>dist.ReduceOp.SUM)</span>
+<span id="cb5-74"><a href="#cb5-74" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-75"><a href="#cb5-75" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> dx, dw, db</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<blockquote class="blockquote">
+<p><strong>Note:</strong> This implementation passes <code>cu_seqlens=None</code> and does not support variable-length packed sequences. Handling variable-length inputs with <code>cu_seqlens</code> requires additional care around boundary indexing and halo construction that I haven’t worked through yet.</p>
+</blockquote>
 <hr>
 </section>
 </section>
-<section id="the-dw-correction-why-the-second-tiny-backward-is-necessary" class="level2">
-<h2 class="anchored" data-anchor-id="the-dw-correction-why-the-second-tiny-backward-is-necessary">The dw correction: why the second tiny backward is necessary</h2>
+<section id="one-boundary-backward-for-both-dx-and-dw" class="level2">
+<h2 class="anchored" data-anchor-id="one-boundary-backward-for-both-dx-and-dw">One boundary backward for both dx and dw</h2>
 <p>This is the part that tends to confuse people (it confused me too the first time).</p>
 <p><strong>What local dw already computed:</strong></p>
 <pre><code>For each x position, compute x[t] × dy[t+(W-1-k)] for k=0,1,2,3:
 
-x[0] × dy[0:4]         ✓ all local
-x[1] × dy[1:5]         ✓ all local
+x[0] × dy[0:4]             ✓ all local
+x[1] × dy[1:5]             ✓ all local
 ...
-x[Ts-3] × dy[Ts-3:Ts+1]   ✓ but dy[Ts] is MISSING (it's on next rank!)
-x[Ts-2] × dy[Ts-2:Ts+2]   ✓ but dy[Ts:Ts+2] is MISSING!
-x[Ts-1] × dy[Ts-1:Ts+3]   ✓ but dy[Ts:Ts+3] is MISSING!</code></pre>
+x[Ts-3] × dy[Ts-3:Ts+1]   dy[Ts] is MISSING (it's on next rank!)
+x[Ts-2] × dy[Ts-2:Ts+2]   dy[Ts:Ts+2] is MISSING!
+x[Ts-1] × dy[Ts-1:Ts+3]   dy[Ts:Ts+3] is MISSING!</code></pre>
 <p><strong>What’s MISSING from local dw:</strong></p>
 <pre><code>x[Ts-3] needs: dy[Ts]          (1 position from halo)
 x[Ts-2] needs: dy[Ts:Ts+2]     (2 positions from halo)
 x[Ts-1] needs: dy[Ts:Ts+3]     (3 positions from halo)</code></pre>
-<p><strong>Why we can’t just use dw_bndr directly:</strong></p>
-<p>If we compute backward on <code>x_bndr</code> with full <code>dy_bndr</code>:</p>
-<pre><code>x_bndr = [x[Ts-3], x[Ts-2], x[Ts-1], 0, 0, 0]
-dy_bndr = [dy[Ts-3], dy[Ts-2], dy[Ts-1], dy[Ts], dy[Ts+1], dy[Ts+2]]
-
-dw_bndr includes:
-  x[Ts-3] × dy[Ts-3:Ts+1]  ← LOCAL parts already in dw_local! ❌
-  x[Ts-2] × dy[Ts-2:Ts+2]  ← LOCAL parts already in dw_local! ❌
-  x[Ts-1] × dy[Ts-1:Ts+3]  ← LOCAL parts already in dw_local! ❌</code></pre>
-<p>We’d be <strong>double-counting</strong> all the local interactions!</p>
-<p><strong>Solution: Zero-pad the local dy part</strong></p>
-<pre><code>dy_bndr_only_halo = [0, 0, 0, dy[Ts], dy[Ts+1], dy[Ts+2]]
-
-dw_correction = causal_conv1d_bwd(x_bndr, dy_bndr_only_halo, ...)
-
-Now computes ONLY:
-  x[Ts-3] × dy[Ts]        ✓ NEW contribution only!
+<p><strong>Naively, you might try:</strong></p>
+<p>Compute backward on <code>x_bndr = [x_tail, x_zeros]</code> with <code>dy_bndr = [dy_tail, dy_halo]</code>. But that double-counts all the local <code>x_tail × dy_tail</code> interactions that the big backward already included.</p>
+<p><strong>The cleaner approach: zero out local dy from the start</strong></p>
+<pre><code>x_bndr  = [x[Ts-3], x[Ts-2], x[Ts-1],  0,        0,        0       ]
+dy_bndr = [0,       0,       0,          dy[Ts],   dy[Ts+1], dy[Ts+2]]</code></pre>
+<p>Now the single boundary backward computes <strong>only</strong>:</p>
+<pre><code>  x[Ts-3] × dy[Ts]        ✓ NEW contribution only!
   x[Ts-2] × dy[Ts:Ts+2]   ✓ NEW contributions only!
-  x[Ts-1] × dy[Ts:Ts+3]   ✓ NEW contributions only!
-
-The zeros prevent recomputing local interactions!</code></pre>
+  x[Ts-1] × dy[Ts:Ts+3]   ✓ NEW contributions only!</code></pre>
+<p>And at the same time, <code>dx_crt[:, :W-1]</code> gives the corrected dx for the right-boundary positions of the shard — also with no double-counting, because the local dy is zero.</p>
+<p>So zeroing the local dy slice in <code>dy_bndr</code> is the one trick that lets a <strong>single</strong> tiny backward correct both <code>dx</code> and <code>dw</code> simultaneously, eliminating what would otherwise be a third kernel call.</p>
 </section>
 </section>
 <section id="wrap-up" class="level1">
@@ -570,10 +545,14 @@ The zeros prevent recomputing local interactions!</code></pre>
 - <strong>don’t extend huge shards to fix tiny boundaries</strong><br>
 - <strong>start comms early, compute locally while comms happen, then patch boundary regions</strong></p>
 <p>Same math, much cleaner system behavior.</p>
-<p>If you try this and your <code>dx</code> or <code>dw</code> correctness fails, the first thing I’d check is whether your boundary tiny backwards are:<br>
+<p>If you try this and your <code>dx</code> or <code>dw</code> correctness fails, the first thing I’d check is whether your single boundary backward is:<br>
 - using the right halo direction (<code>dy</code> from the <em>right</em>),<br>
-- patching the correct slices of <code>dx</code>,<br>
-- and avoiding <code>dw</code> double-counting via the “zero local dy” correction pass. —</p>
+- zeroing out the <strong>local</strong> dy slice (not the halo slice) in <code>dy_bndr</code>,<br>
+- patching <code>dx</code> with <code>dx_crt[:, :W-1]</code> (the x_tail half, not the zero-padded half),<br>
+- and running the big local backward <strong>before</strong> waiting for the halo (so comms and compute overlap).</p>
+<section id="also-worth-noting-this-implementation-does-not-yet-handle-cu_seqlens-variable-length-packed-sequences.-that-case-needs-more-thought-around-how-boundaries-and-halos-interact-with-sequence-boundaries-inside-a-packed-batch." class="level2">
+<h2 class="anchored" data-anchor-id="also-worth-noting-this-implementation-does-not-yet-handle-cu_seqlens-variable-length-packed-sequences.-that-case-needs-more-thought-around-how-boundaries-and-halos-interact-with-sequence-boundaries-inside-a-packed-batch.">Also worth noting: this implementation does not yet handle <code>cu_seqlens</code> (variable-length packed sequences). That case needs more thought around how boundaries and halos interact with sequence boundaries inside a packed batch.</h2>
+</section>
 </section>
 <section id="references" class="level1">
 <h1>References</h1>
