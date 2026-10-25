@@ -1,24 +1,29 @@
-/* Import modern fonts */
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Courier+Prime:wght@400;700&display=swap');
+/* Import fonts: sci-fi display face for headings, clean mono-ish body */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Space+Grotesk:wght@400;500;600;700&family=Courier+Prime:wght@400;700&display=swap');
 
 :root {
-    --primary-color: #111;
-    --secondary-color: #222;
-    --text-color: #111;
-    --bg-color: #fff;
-    --gray-light: #f5f5f5;
-    --border-color: #e0e0e0;
+    /* Deep-space / portal palette */
+    --primary-color: #f1f3ff;        /* starlight white - headings & emphasis */
+    --secondary-color: #7ee787;      /* portal green - accents & hover */
+    --text-color: #b9bfe6;           /* soft lavender - body text */
+    --bg-color: #13152f;             /* card / panel background */
+    --bg-color-alt: #1b1e44;         /* hover / elevated panel */
+    --gray-light: #20234c;           /* tag background */
+    --border-color: #30336b;         /* card borders */
+    --accent-yellow: #f4e04d;        /* morty yellow */
+    --accent-pink: #ff6ec7;          /* rare accent */
+    --primary-color-rgb: 241, 243, 255;
     --spacing: 8rem;
-    
-    /* Font families */
-    --font-heading: 'Alegreya', 'Fira Mono', 'JetBrains Mono', 'Courier New', monospace;
-    --font-body: 'Alegreya', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
 
-    --wp--preset--color--background: #f2f0ea; /* Background color */
-    --wp--preset--color--foreground: #023e47; /* Foreground color */
-    --wp--preset--color--primary: #7a5e2f; /* Primary color */
-    --wp--preset--color--secondary: #8b6b36; /* Secondary color */
-    --wp--preset--color--tertiary: #097889; /* Tertiary color */
+    /* Font families */
+    --font-heading: 'Orbitron', 'Alegreya', 'Fira Mono', monospace;
+    --font-body: 'Space Grotesk', 'Alegreya', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+    --wp--preset--color--background: #0a0c22; /* page background - deep space */
+    --wp--preset--color--foreground: #e9ecff; /* page foreground */
+    --wp--preset--color--primary: #7ee787;    /* portal green */
+    --wp--preset--color--secondary: #f4e04d;  /* morty yellow */
+    --wp--preset--color--tertiary: #7ee787;   /* links */
 }
 
 * {
@@ -27,15 +32,61 @@
     box-sizing: border-box;
 }
 
+::selection {
+    background: var(--secondary-color);
+    color: #0a0c22;
+}
+
 body {
-    background-color: var(--wp--preset--color--background); /* Set background color */
-    color: var(--wp--preset--color--foreground); /* Set foreground color */
-    font-family: var(--font-body); /* Use Alegreya for body text */
+    background-color: var(--wp--preset--color--background);
+    color: var(--wp--preset--color--foreground);
+    font-family: var(--font-body);
     line-height: 1.7;
+    position: relative;
+    min-height: 100vh;
+    /* Starfield: layered dots tiled across the whole page */
+    background-image:
+        radial-gradient(circle at 10% 20%, rgba(255,255,255,0.9) 0 1px, transparent 1px),
+        radial-gradient(circle at 80% 10%, rgba(255,255,255,0.6) 0 1px, transparent 1px),
+        radial-gradient(circle at 50% 50%, rgba(126,231,135,0.7) 0 1.4px, transparent 1.4px),
+        radial-gradient(circle at 30% 70%, rgba(255,255,255,0.7) 0 1px, transparent 1px),
+        radial-gradient(circle at 65% 85%, rgba(244,224,77,0.6) 0 1.3px, transparent 1.3px),
+        radial-gradient(circle at 90% 60%, rgba(255,255,255,0.5) 0 1px, transparent 1px);
+    background-size: 180px 180px, 240px 240px, 260px 260px, 300px 300px, 340px 340px, 220px 220px;
+    background-repeat: repeat;
+    background-attachment: fixed;
+}
+
+/* Subtle galaxy wash drifting behind everything */
+body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(ellipse at 20% 0%, rgba(126,231,135,0.08), transparent 60%),
+                radial-gradient(ellipse at 85% 80%, rgba(244,224,77,0.06), transparent 55%);
+    animation: twinkle 10s ease-in-out infinite alternate;
+}
+
+@keyframes twinkle {
+    0% { opacity: 0.6; }
+    100% { opacity: 1; }
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+}
+::-webkit-scrollbar-track {
+    background: var(--wp--preset--color--background);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--secondary-color);
+    border-radius: 6px;
 }
 
 .container {
-    font-family: var(--font-body); /* Use Alegreya for container text */
+    font-family: var(--font-body);
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 2rem;
@@ -43,10 +94,11 @@ body {
 
 /* Typography updates */
 h1, h2, h3 {
-    font-family: var(--font-heading); /* Use Alegreya for headings */
+    font-family: var(--font-heading);
     color: var(--primary-color);
     font-weight: 700;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
+    text-shadow: 0 0 20px rgba(126, 231, 135, 0.25);
 }
 
 h1 { font-size: 3rem; }
@@ -54,9 +106,9 @@ h2 { font-size: 2rem; }
 h3 { font-size: 1.2rem; }
 
 .subtitle {
-    font-family: var(--font-body); /* Use Alegreya for subtitles */
+    font-family: var(--font-body);
     font-size: 1.5rem;
-    color: hsl(200, 15%, 75%); /* Light gray for subtitle */
+    color: var(--secondary-color);
     margin-bottom: 2rem;
 }
 
@@ -65,7 +117,8 @@ nav {
     position: fixed;
     top: 0;
     width: 100%;
-    background: var(--wp--preset--color--background); /* Set to the same background color */
+    background: rgba(10, 12, 34, 0.85);
+    backdrop-filter: blur(8px);
     z-index: 1000;
     border-bottom: 1px solid var(--border-color);
     box-shadow: none;
@@ -82,9 +135,30 @@ nav {
 }
 
 .logo {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-family: var(--font-heading);
     font-size: 1.5rem;
     color: var(--primary-color);
+    text-shadow: 0 0 12px rgba(126, 231, 135, 0.6);
+}
+
+.logo::before {
+    content: '';
+    position: absolute;
+    inset: -10px;
+    border-radius: 50%;
+    background: conic-gradient(var(--secondary-color), var(--accent-yellow), var(--secondary-color));
+    opacity: 0.25;
+    filter: blur(4px);
+    animation: spin 6s linear infinite;
+    z-index: -1;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
 .nav-links {
@@ -98,11 +172,12 @@ nav {
     font-weight: 600;
     text-decoration: none;
     margin-left: 2rem;
-    transition: color 0.2s;
+    transition: color 0.2s, text-shadow 0.2s;
 }
 
 .nav-links a:hover {
     color: var(--secondary-color);
+    text-shadow: 0 0 10px rgba(126, 231, 135, 0.6);
 }
 
 /* Hero Section */
@@ -113,7 +188,7 @@ nav {
     overflow: hidden;
     display: flex;
     align-items: center;
-    background: var(--wp--preset--color--background); /* Set to the same background color */
+    background: transparent;
 }
 
 .hero-background {
@@ -132,21 +207,21 @@ nav {
 }
 
 .gradient-circle:nth-child(1) {
-    background: hsl(230, 84%, 90%);
+    background: var(--secondary-color);
     width: 500px;
     height: 500px;
     top: -100px;
     right: -100px;
-    opacity: 0.2;
+    opacity: 0.18;
 }
 
 .gradient-circle:nth-child(2) {
-    background: hsl(200, 84%, 90%);
+    background: var(--accent-yellow);
     width: 300px;
     height: 300px;
     bottom: -50px;
     left: -50px;
-    opacity: 0.15;
+    opacity: 0.12;
 }
 
 /* Update Hero Section styles */
@@ -163,13 +238,26 @@ nav {
 }
 
 .profile-image {
+    position: relative;
     width: 400px;
     height: 500px;
     border-radius: 12px;
     overflow: hidden;
-    border: 4px solid rgba(255, 255, 255, 0.8);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border: 4px solid var(--secondary-color);
+    box-shadow: 0 0 40px rgba(126, 231, 135, 0.35);
     margin-right: -2rem;
+}
+
+.profile-image::before {
+    content: '';
+    position: absolute;
+    inset: -30px;
+    z-index: -1;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--secondary-color), var(--accent-yellow), var(--secondary-color), var(--accent-pink), var(--secondary-color));
+    filter: blur(30px);
+    opacity: 0.45;
+    animation: spin 12s linear infinite;
 }
 
 .profile-image img {
@@ -185,9 +273,9 @@ nav {
 
 /* Smart font for intro/profile text */
 .profile-text {
-    font-family: var(--font-body); /* Use Alegreya for these elements */
+    font-family: var(--font-body);
     font-size: 1.08rem;
-    color: #222;
+    color: var(--text-color);
     line-height: 1.7;
 }
 
@@ -201,15 +289,17 @@ nav {
 .timeline-item {
     position: relative;
     padding: 2rem;
-    background: white;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
     border-radius: 1rem;
     margin-bottom: 2rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-    transition: transform 0.3s;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s, border-color 0.3s;
 }
 
 .timeline-item:hover {
     transform: translateY(-4px);
+    border-color: var(--secondary-color);
 }
 
 /* Project card styles */
@@ -229,15 +319,16 @@ nav {
     margin-bottom: 2rem;
     font-family: var(--font-body);
     box-shadow: none;
-    transition: border 0.2s;
+    transition: border 0.2s, box-shadow 0.2s;
 }
 
 .project-card:hover {
     border: 1.5px solid var(--secondary-color);
+    box-shadow: 0 0 25px rgba(126, 231, 135, 0.2);
 }
 
 .project-card:hover .project-content {
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
 }
 
 /* Article card styles */
@@ -248,20 +339,22 @@ nav {
 }
 
 .article-card {
-    background: white;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
     padding: 2rem;
     border-radius: 1rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-    transition: transform 0.3s;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s, border-color 0.3s;
 }
 
 .article-card:hover {
     transform: translateY(-4px);
+    border-color: var(--secondary-color);
 }
 
 .article-date {
     font-family: var(--font-heading);
-    color: var(--primary-color);
+    color: var(--secondary-color);
     font-size: 0.9rem;
     font-weight: 500;
 }
@@ -279,6 +372,7 @@ nav {
 
 .link-item:hover {
     gap: 0.8rem;
+    color: var(--secondary-color);
 }
 
 /* Update buttons */
@@ -286,14 +380,15 @@ nav {
     display: flex;
     gap: 1rem;
     margin-top: 2rem;
+    flex-wrap: wrap;
 }
 
 .cta-buttons .primary-button,
 .cta-buttons .secondary-button,
 .primary-button {
     background: none;
-    border: 2px solid var(--primary-color);
-    color: var(--primary-color);
+    border: 2px solid var(--secondary-color);
+    color: var(--secondary-color);
     font-family: var(--font-heading);
     border-radius: 8px;
     padding: 10px 24px;
@@ -301,27 +396,32 @@ nav {
     font-weight: 600;
     cursor: pointer;
     margin-right: 1rem;
-    transition: background 0.2s, color 0.2s;
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
 }
 
 .cta-buttons .primary-button:hover,
 .cta-buttons .secondary-button:hover,
 .primary-button:hover {
-    background: var(--primary-color);
-    color: #fff;
+    background: var(--secondary-color);
+    color: #0a0c22;
+    box-shadow: 0 0 20px rgba(126, 231, 135, 0.5);
 }
 
 /* Contact Section */
 #contact {
     padding: 4rem 0;
-    background: var(--wp--preset--color--background); /* Set to the same background color */
+    background: transparent;
     color: var(--primary-color);
     border-top: 1px solid var(--border-color);
 }
 
 .contact-content {
-    font-family: var(--font-body); /* Use Alegreya for these elements */
+    font-family: var(--font-body);
     text-align: center;
+}
+
+.contact-content p {
+    color: var(--text-color);
 }
 
 .contact-links {
@@ -340,40 +440,43 @@ nav {
 
 .social-links a {
     color: var(--primary-color);
-    opacity: 0.7;
+    opacity: 0.8;
     font-family: var(--font-heading);
     font-size: 1.1rem;
     margin-right: 1.5rem;
     text-decoration: none;
-    transition: opacity 0.2s;
+    transition: opacity 0.2s, color 0.2s, text-shadow 0.2s;
 }
 
 .social-links a:hover {
     opacity: 1;
+    color: var(--secondary-color);
+    text-shadow: 0 0 10px rgba(126, 231, 135, 0.6);
 }
 
 /* Update button styles */
 .primary-button {
-    background-color: var(--primary-color); /* Use a professional blue */
-    color: hsl(0, 0%, 95%); /* Light text color */
+    background-color: var(--secondary-color);
+    color: #0a0c22;
     padding: 12px 24px;
-    border-radius: 30px; /* Rounded button */
+    border-radius: 30px;
     text-decoration: none;
     font-weight: 500;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 20px rgba(126, 231, 135, 0.3);
 }
 
 .primary-button:hover {
-    background-color: hsl(210, 100%, 40%); /* Darker blue on hover */
+    background-color: var(--accent-yellow);
     transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(244, 224, 77, 0.4);
 }
 
 /* Footer */
 footer {
     padding: 2rem 0 1rem 0;
-    background: var(--wp--preset--color--background); /* Set to the same background color */
-    color: var(--secondary-color);
+    background: transparent;
+    color: var(--text-color);
     text-align: center;
     font-size: 0.95rem;
     border-top: 1px solid var(--border-color);
@@ -382,12 +485,12 @@ footer {
 /* Experience Section Styles */
 #experience {
     padding: var(--spacing) 0;
-    background: var(--wp--preset--color--background); /* Set to the same background color */
+    background: transparent;
 }
 
 .experience-container {
     display: flex;
-    flex-direction: column; /* Stack items vertically */
+    flex-direction: column;
     gap: 2rem;
     max-width: 1200px;
     margin: 0 auto;
@@ -403,25 +506,26 @@ footer {
     margin-bottom: 2rem;
     font-family: var(--font-body);
     box-shadow: none;
-    transition: border 0.2s;
+    transition: border 0.2s, box-shadow 0.2s;
 }
 
 .experience-panel:hover {
     border: 1.5px solid var(--secondary-color);
+    box-shadow: 0 0 25px rgba(126, 231, 135, 0.2);
 }
 
 /* Hide experience details by default */
 .experience-details {
-    max-height: 0; /* Hidden by default */
-    opacity: 0; /* Hidden by default */
-    transition: max-height 0.3s ease, opacity 0.3s ease; /* Smooth transition */
-    overflow: hidden; /* Hide overflow */
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+    overflow: hidden;
 }
 
 /* Show experience details on hover */
 .experience-panel:hover .experience-details {
-    max-height: 500px; /* Set a larger max height for the expanded state */
-    opacity: 1; /* Show on hover */
+    max-height: 500px;
+    opacity: 1;
 }
 
 /* Company Header */
@@ -441,21 +545,21 @@ footer {
     object-fit: contain;
     border-radius: 8px;
     padding: 8px;
-    background: white;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    background: #fff;
+    box-shadow: 0 0 15px rgba(126, 231, 135, 0.25);
 }
 
 .company-name {
     font-family: var(--font-body);
-    color: var(--primary-color);
+    color: var(--text-color);
     font-weight: 500;
     margin-bottom: 0.25rem;
 }
 
 .duration, .location {
     font-family: var(--font-body);
-    color: var(--primary-color);
-    opacity: 0.7;
+    color: var(--secondary-color);
+    opacity: 0.85;
     font-size: 0.9rem;
     margin-bottom: 0.25rem;
 }
@@ -470,8 +574,9 @@ footer {
 
 .skill-tag {
     background: var(--gray-light);
-    color: var(--primary-color);
+    color: var(--secondary-color);
     font-family: var(--font-heading);
+    border: 1px solid var(--border-color);
     border-radius: 6px;
     padding: 2px 10px;
     font-size: 0.95em;
@@ -487,6 +592,7 @@ footer {
     position: relative;
     padding-left: 1.5rem;
     margin-bottom: 0.7rem;
+    color: var(--text-color);
 }
 
 /* Main bullet points */
@@ -499,7 +605,7 @@ footer {
 /* Achievements Section */
 #achievements {
     padding: var(--spacing) 0;
-    background: var(--wp--preset--color--background);
+    background: transparent;
 }
 
 #achievements h2 {
@@ -536,8 +642,8 @@ footer {
 .achievement-badge {
     display: inline-block;
     padding: 0.4rem 0.9rem;
-    background: var(--primary-color);
-    color: white;
+    background: linear-gradient(135deg, var(--secondary-color), var(--accent-yellow));
+    color: #0a0c22;
     border-radius: 4px;
     font-size: 0.85rem;
     font-weight: 600;
@@ -575,7 +681,7 @@ footer {
 }
 
 .achievement-link:hover {
-    color: var(--primary-color);
+    color: var(--accent-yellow);
 }
 
 .achievement-link i {
@@ -592,7 +698,7 @@ footer {
 /* Projects Section */
 #projects {
     padding: var(--spacing) 0;
-    background: var(--wp--preset--color--background); /* Set to the same background color */
+    background: transparent;
 }
 
 /* Project Categories */
@@ -608,17 +714,17 @@ footer {
     font-family: var(--font-heading);
     font-size: 0.9rem;
     background: transparent;
-    border: 1px solid var(--text-color);
+    border: 1px solid var(--secondary-color);
     border-radius: 2rem;
-    color: var(--text-color);
+    color: var(--secondary-color);
     cursor: pointer;
     transition: all 0.3s;
 }
 
 .category-btn:hover, .category-btn.active {
-    background: var(--primary-color);
-    border-color: var(--primary-color);
-    color: white;
+    background: var(--secondary-color);
+    border-color: var(--secondary-color);
+    color: #0a0c22;
 }
 
 /* Project Card Improvements */
@@ -627,9 +733,9 @@ footer {
     display: flex;
     gap: 3rem;
     align-items: flex-start;
-    background: #1e1e1e; /* Black background for project content */
+    background: var(--bg-color-alt);
     border-radius: 1rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
     transition: all 0.3s ease;
 }
 
@@ -658,10 +764,9 @@ footer {
 }
 
 .project-desc {
-    font-family: var(--font-body); /* Use Alegreya for these elements */
+    font-family: var(--font-body);
     font-size: 1.1rem;
-    color: var(--primary-color);
-    opacity: 0.8;
+    color: var(--text-color);
     line-height: 1.6;
 }
 
@@ -674,28 +779,28 @@ footer {
 .project-links a {
     color: var(--primary-color);
     font-size: 1.4rem;
-    opacity: 0.7;
+    opacity: 0.75;
     transition: all 0.3s;
 }
 
 .project-links a:hover {
-    color: var(--primary-color);
+    color: var(--secondary-color);
     opacity: 1;
     transform: translateY(-2px);
 }
 
 /* Hide project details by default */
 .project-details {
-    max-height: 0; /* Hidden by default */
-    opacity: 0; /* Hidden by default */
-    transition: max-height 0.3s ease, opacity 0.3s ease; /* Smooth transition */
-    overflow: hidden; /* Hide overflow */
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+    overflow: hidden;
 }
 
 /* Show project details on hover */
 .project-card:hover .project-details {
-    max-height: 200px; /* Set a max height for the expanded state */
-    opacity: 1; /* Show on hover */
+    max-height: 200px;
+    opacity: 1;
 }
 
 /* Tech Stack */
@@ -708,7 +813,7 @@ footer {
 .tech-tag {
     padding: 0.5rem 1rem;
     background: rgba(var(--primary-color-rgb), 0.08);
-    color: var(--primary-color);
+    color: var(--secondary-color);
     border-radius: 2rem;
     font-size: 0.9rem;
     font-weight: 500;
@@ -720,7 +825,7 @@ footer {
     width: 35%;
     border-radius: 0.75rem;
     overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 .project-image img {
@@ -776,27 +881,27 @@ footer {
     top: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
+    background-color: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(5px);
 }
 
 .modal-content {
     position: relative;
-    background-color: var(--bg-color); /* Keep white background for modal */
+    background-color: #fff;
     margin: 2% auto;
     padding: 20px;
     width: 90%;
     max-width: 1000px;
     height: 90%;
     border-radius: 12px;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0 40px rgba(126, 231, 135, 0.3);
 }
 
 .close-modal {
     position: absolute;
     right: 25px;
     top: 10px;
-    color: var(--primary-color);
+    color: #0a0c22;
     font-size: 35px;
     font-weight: bold;
     cursor: pointer;
@@ -817,22 +922,22 @@ footer {
     position: absolute;
     bottom: 20px;
     right: 20px;
-    background-color: var(--primary-color); /* Deep black for download button */
-    color: white;
+    background-color: var(--secondary-color);
+    color: #0a0c22;
     padding: 12px 24px;
-    border-radius: 30px; /* Rounded button */
+    border-radius: 30px;
     text-decoration: none;
     font-weight: 500;
     display: flex;
     align-items: center;
     gap: 8px;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 15px rgba(126, 231, 135, 0.3);
 }
 
 .download-button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 6px 20px rgba(126, 231, 135, 0.45);
 }
 
 @media (max-width: 768px) {
@@ -841,7 +946,7 @@ footer {
         height: 95%;
         margin: 2.5% auto;
     }
-    
+
     .download-button {
         bottom: 10px;
         right: 10px;
@@ -863,24 +968,25 @@ footer {
 
 .articles-list a {
     font-family: var(--font-body);
-    color: #111;
+    color: var(--primary-color);
     text-decoration: underline;
+    text-decoration-color: var(--secondary-color);
     transition: color 0.2s;
 }
 
 .articles-list a:hover {
-    color: #0056b3;
+    color: var(--secondary-color);
 }
 
 .article-meta {
     display: block;
     font-size: 0.95em;
-    color: #666;
+    color: var(--accent-yellow);
     margin-top: 0.2em;
     font-family: var(--font-body);
 }
 
-/* Ensure all relevant elements use Alegreya */
+/* Ensure all relevant elements use the body font consistently */
 h1, h2, h3, .subtitle, .profile-text, .project-desc, .contact-content, .achievement-list li {
-    font-family: var(--font-body); /* Use Alegreya for these elements */
-} 
+    font-family: var(--font-body);
+}
